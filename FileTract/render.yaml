@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: filetract
+    env: docker
+    dockerfilePath: ./Dockerfile
+    region: oregon
+    plan: free
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: PORT
+        value: 5000
+    healthCheckPath: /api/health

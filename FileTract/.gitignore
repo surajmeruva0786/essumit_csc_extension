@@ -1,0 +1,64 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Environment variables - DO NOT COMMIT
+.env
+
+# Virtual Environment - exclude all variations
+venv/
+env/
+ENV/
+.venv/
+venv*/
+env*/
+*.virtualenv
+pyvenv.cfg
+pip-selfcheck.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Project specific - exclude all files except Python files
+# Documents and images
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.tiff
+*.bmp
+*.gif
+
+# Output files
+*_extracted_text.txt
+*_extracted_fields.json
+*_ocr_output.txt
+*_structured.json
+
+# Text and data files
+*.txt
+*.json
+*.csv
+*.xlsx
+
+# Markdown files (except README and PATENT_STRATEGY)
+*.md
+!README.md
+!PATENT_STRATEGY.md
+
+# Keep only Python files and essential config
+!*.py
+!requirements.txt
+!.gitignore

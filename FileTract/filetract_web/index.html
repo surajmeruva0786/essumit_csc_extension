@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FileTract | Patent-Pending OCR Intelligence</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700;900&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <input type="file" id="fileInput" accept=".pdf,.png,.jpg,.jpeg,.tiff,.bmp" multiple style="display: none;">
+
+    <div class="app-container">
+        <!-- Tectonic Plate: Left Sidebar -->
+        <aside class="plate sidebar">
+            <div class="brand">
+                <h1>File<span>Tract</span></h1>
+                <div class="patent-badge">PATENT-PENDING PIPELINE v2.0</div>
+            </div>
+
+            <div class="field-group">
+                <h2 style="font-size: 0.7rem; color: var(--text-dim); margin-bottom: 15px; letter-spacing: 0.1em;">INPUT
+                    CONFIGURATION</h2>
+                <label class="field-label">Target Fields</label>
+                <textarea id="fieldsInput" class="field-input" rows="4"
+                    placeholder="Name, Father Name, School, Date of Birth, CGPA">Name, Father Name, School, Date of Birth, CGPA</textarea>
+
+                <label class="field-label">Selected Source</label>
+                <div id="selectedFile" class="field-input"
+                    style="font-size: 0.75rem; color: var(--text-dim); cursor: pointer;"
+                    onclick="document.getElementById('fileInput').click();">
+                    Click to select document...
+                </div>
+
+                <button class="btn-pipeline" onclick="processDocument('standard')">Standard Pipeline</button>
+                <button class="btn-pipeline patent" onclick="processDocument('patent')">Execute Patent Pipeline</button>
+            </div>
+
+            <div style="margin-top: auto;">
+                <div class="quality-metrics">
+                    <div class="metric-row">
+                        <span>Adaptive Re-OCR</span>
+                        <span id="reOcrStatus" style="color: var(--text-dim);">STANDBY</span>
+                    </div>
+                    <div class="metric-row">
+                        <span>Fusion Delta</span>
+                        <span>0.10</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Tectonic Plate: Central Engine -->
+        <div class="engine-view">
+            <section class="plate">
+                <div class="plate-header">
+                    <h2>Live Spatial Analysis Grid</h2>
+                    <div style="font-size: 0.65rem; color: var(--accent-primary);">σ = 5px Gaussian</div>
+                </div>
+                <div class="visualizer-stage">
+                    <div class="document-preview" id="documentPreview">
+                        <div class="scan-line" id="scanLine" style="display: none;"></div>
+                        <div class="heatmap-overlay" id="heatmapOverlay" style="display: none;"></div>
+                        <!-- Document preview will be injected here -->
+                        <div id="previewContent"
+                            style="padding: 40px; color: rgba(255,255,255,0.1); font-family: serif; display: flex; align-items: center; justify-content: center; height: 100%; text-align: center;">
+                            <div>
+                                <div style="font-size: 3rem; margin-bottom: 20px;">📄</div>
+                                <div style="color: var(--text-dim);">Upload a document to begin</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="pipeline-tracker">
+                    <div class="step" id="step1">
+                        <span class="step-num">01</span>
+                        <span class="step-name">Baseline</span>
+                    </div>
+                    <div class="step" id="step2">
+                        <span class="step-num">02</span>
+                        <span class="step-name">Spatial Map</span>
+                    </div>
+                    <div class="step" id="step3">
+                        <span class="step-num">03</span>
+                        <span class="step-name">Adaptive Re-OCR</span>
+                    </div>
+                    <div class="step" id="step4">
+                        <span class="step-num">04</span>
+                        <span class="step-name">Fusion</span>
+                    </div>
+                    <div class="step" id="step5">
+                        <span class="step-num">05</span>
+                        <span class="step-name">LLM Extraction</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="plate">
+                <div class="plate-header">
+                    <h2>Intelligence Stream (JSON)</h2>
+                    <span id="jsonStatus" class="tag-high" style="display: none;">Valid Signature</span>
+                </div>
+                <div class="code-block" id="jsonOutput">
+                    <span style="color: #6a8759;">// Awaiting extraction results...</span>
+                    <span style="color: #808080;">// Upload a document and select fields to begin processing</span>
+                </div>
+            </section>
+        </div>
+
+        <!-- Tectonic Plate: Right Results -->
+        <aside class="plate results-panel">
+            <div class="plate-header">
+                <h2>Extraction Results</h2>
+            </div>
+
+            <div id="resultsContainer" style="margin-top: 20px;">
+                <div style="text-align: center; padding: 40px; color: var(--text-dim);">
+                    <div style="font-size: 2rem; margin-bottom: 15px;">⏳</div>
+                    <div>No results yet</div>
+                    <div style="font-size: 0.7rem; margin-top: 10px;">Process a document to see extracted fields</div>
+                </div>
+            </div>
+
+            <div id="qualityMetrics" style="display: none;" class="quality-metrics">
+                <h3 style="font-size: 0.7rem; margin-bottom: 15px;">FUSION QUALITY REPORT</h3>
+                <div class="metric-row">
+                    <span>Mean Confidence</span>
+                    <div class="metric-bar">
+                        <div id="meanConfBar" class="metric-fill" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <div class="metric-row">
+                    <span>Re-OCR Selection</span>
+                    <div class="metric-bar">
+                        <div id="reOcrBar" class="metric-fill" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <div class="metric-row">
+                    <span>Improvement Rate</span>
+                    <div class="metric-bar">
+                        <div id="improvementBar" class="metric-fill" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <div class="metric-row"
+                    style="margin-top: 15px; border-top: 1px solid var(--plate-edge); padding-top: 10px;">
+                    <span>OVERALL SCORE</span>
+                    <span id="overallScore" style="color: var(--accent-primary); font-weight: 900;">-- / 10</span>
+                </div>
+            </div>
+
+            <div style="margin-top: auto; padding-bottom: 10px;">
+                <button id="exportBtn" class="btn-pipeline"
+                    style="background: transparent; color: var(--accent-primary); border: 1px solid var(--accent-primary); display: none;"
+                    onclick="exportResults()">Export Structured Data</button>
+            </div>
+        </aside>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
