@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSC Sahayak</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <!-- ===== Header ===== -->
+    <header class="header">
+      <div class="header-icon">🏛️</div>
+      <div class="header-info">
+        <div class="header-title">CSC सहायक</div>
+        <div class="header-subtitle" id="headerSubtitle">सामान्य सेवा केंद्र सहायक</div>
+      </div>
+      <span class="header-badge" id="headerBadge">ऑनलाइन</span>
+    </header>
+
+    <!-- ===== Chat Container ===== -->
+    <div class="chat-container" id="chatContainer">
+      <!-- Landing card injected by JS -->
+    </div>
+
+    <!-- ===== Input Area ===== -->
+    <div class="input-area hidden" id="inputArea">
+      <div class="input-wrapper">
+        <input
+          type="text"
+          class="input-field"
+          id="userInput"
+          placeholder="अपना उत्तर यहाँ लिखें / Type here..."
+          autocomplete="off"
+        >
+        <button class="btn-mic" id="btnMic" title="Voice input (coming soon)">
+          🎙️
+        </button>
+      </div>
+      <button class="btn-send" id="btnSend" title="भेजें / Send" disabled>
+        ➤
+      </button>
+    </div>
+  </div>
+
+  <script src="panel.js"></script>
+</body>
+</html>

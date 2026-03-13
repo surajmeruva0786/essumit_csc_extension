@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <rect width="48" height="48" rx="8" fill="#FF9933"/>
+  <circle cx="24" cy="20" r="12" fill="#FFFFFF" opacity="0.2"/>
+  <text x="24" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" font-weight="bold" fill="#FFFFFF">CSC</text>
+  <rect x="0" y="40" width="48" height="8" rx="0" fill="#138808"/>
+  <circle cx="24" cy="44" r="2" fill="#FFFFFF"/>
+</svg>
