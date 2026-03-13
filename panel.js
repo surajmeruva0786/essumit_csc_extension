@@ -667,7 +667,7 @@
           <div class="loader-spinner"></div>
           <span>AI दस्तावेज़ पढ़ रहा है...</span>
         </div>
-        <div class="loader-status" id="status_${loaderId}">Verifying uploaded documents...</div>
+        <div class="loader-status" id="status_${loaderId}">फॉर्म फ़ील्ड्स खोज रहा है... / Scanning form fields...</div>
         <div class="loader-skeleton">
           <div class="skeleton-row w-70"></div>
           <div class="skeleton-row w-90"></div>
@@ -678,8 +678,45 @@
     addBotWidget(loaderHTML);
 
     const statusEl = document.getElementById(`status_${loaderId}`);
-    
-    // Only extract if we have actual files and ExtractionService exists
+
+    // ─── STEP 0: Scan form fields from the active tab ────────
+    let scannedFields = null;
+    let fieldsToExtract = config.formFields || [];
+
+    try {
+      scannedFields = await scanActiveTabFormFields(statusEl);
+    } catch (e) {
+      console.warn("[Panel] Form scanning failed, using config.formFields fallback:", e);
+    }
+
+    if (scannedFields && scannedFields.length > 0) {
+      console.log("[Panel] Scanned", scannedFields.length, "fields from active tab:", scannedFields);
+      fieldsToExtract = scannedFields.map(f => f.fieldKey);
+
+      // Store scanned selectors & labels for auto-fill and display
+      sessionData.scannedFields = scannedFields;
+      sessionData.scannedSelectors = {};
+      sessionData.scannedLabels = {};
+      scannedFields.forEach(f => {
+        sessionData.scannedSelectors[f.fieldKey] = f.selector;
+        sessionData.scannedLabels[f.fieldKey] = {
+          en: f.label,
+          hi: f.labelHi || f.label
+        };
+      });
+
+      if (statusEl) statusEl.textContent = `✅ ${scannedFields.length} फ़ील्ड्स मिलीं / ${scannedFields.length} fields found`;
+      await delay(800);
+    } else {
+      console.log("[Panel] No scanned fields, using hardcoded config.formFields:", fieldsToExtract);
+      sessionData.scannedFields = null;
+      sessionData.scannedSelectors = null;
+      sessionData.scannedLabels = null;
+    }
+
+    // ─── Continue with extraction ────────────────────────────
+    if (statusEl) statusEl.textContent = "दस्तावेज़ जाँच रहा है... / Verifying uploaded documents...";
+
     const uploadedFiles = sessionData.documents.filter(d => d.base64);
     let extractedResult = null;
 
@@ -687,14 +724,10 @@
     console.log("[Panel] sessionData.documents:", sessionData.documents.length, "total");
     console.log("[Panel] uploadedFiles (with base64):", uploadedFiles.length);
     console.log("[Panel] ExtractionService defined:", typeof ExtractionService !== "undefined");
-    console.log("[Panel] config.formFields:", config.formFields);
-    uploadedFiles.forEach((f, i) => {
-      console.log(`[Panel] File ${i}: ${f.fileName}, type=${f.docType}, mime=${f.mimeType}, base64 length=${f.base64 ? f.base64.length : 0}`);
-    });
+    console.log("[Panel] fieldsToExtract:", fieldsToExtract);
 
     if (uploadedFiles.length > 0 && typeof ExtractionService !== "undefined") {
       try {
-        const fieldsToExtract = config.formFields || [];
         console.log("[Panel] Calling ExtractionService.extractFields with", fieldsToExtract.length, "fields");
         
         extractedResult = await ExtractionService.extractFields(
@@ -711,16 +744,16 @@
         console.error("[Panel] Extraction FAILED:", err, err.stack);
         if (statusEl) statusEl.textContent = "⚠️ Error: " + err.message;
         
-        if (typeof ExtractionService !== "undefined" && config.formFields) {
-           extractedResult = ExtractionService.getManualEntryFields(config.formFields);
+        if (typeof ExtractionService !== "undefined") {
+           extractedResult = ExtractionService.getManualEntryFields(fieldsToExtract);
         }
       }
     } else {
       console.warn("[Panel] SKIPPING extraction — uploadedFiles:", uploadedFiles.length, "ExtractionService:", typeof ExtractionService);
       if (statusEl) statusEl.textContent = "No files uploaded. Proceeding to manual entry.";
       await delay(1000);
-      if (typeof ExtractionService !== "undefined" && config.formFields) {
-         extractedResult = ExtractionService.getManualEntryFields(config.formFields);
+      if (typeof ExtractionService !== "undefined") {
+         extractedResult = ExtractionService.getManualEntryFields(fieldsToExtract);
       } else {
          extractedResult = { extractedFields: {}, crossDocumentMismatches: [] };
       }
@@ -741,6 +774,56 @@
     // Show results
     showExtractionResults(extractedResult, config);
   }
+
+  /**
+   * Send SCAN_FORM_FIELDS to the active tab and return the result.
+   * Falls back to injecting content.js first if needed.
+   */
+  function scanActiveTabFormFields(statusEl) {
+    return new Promise((resolve, reject) => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (!tabs || tabs.length === 0) {
+          reject(new Error("No active tab"));
+          return;
+        }
+
+        const tabId = tabs[0].id;
+
+        if (statusEl) statusEl.textContent = "फॉर्म स्कैन हो रहा है... / Scanning open form...";
+
+        chrome.tabs.sendMessage(tabId, { type: "SCAN_FORM_FIELDS" }, (response) => {
+          if (chrome.runtime.lastError) {
+            // Content script not loaded — inject it first
+            if (chrome.scripting) {
+              chrome.scripting.executeScript(
+                { target: { tabId: tabId }, files: ["content.js"] },
+                () => {
+                  if (chrome.runtime.lastError) {
+                    reject(new Error(chrome.runtime.lastError.message));
+                    return;
+                  }
+                  setTimeout(() => {
+                    chrome.tabs.sendMessage(tabId, { type: "SCAN_FORM_FIELDS" }, (res2) => {
+                      if (chrome.runtime.lastError) {
+                        reject(new Error(chrome.runtime.lastError.message));
+                      } else {
+                        resolve(res2 || []);
+                      }
+                    });
+                  }, 500);
+                }
+              );
+            } else {
+              reject(new Error("Cannot inject content script"));
+            }
+          } else {
+            resolve(response || []);
+          }
+        });
+      });
+    });
+  }
+
 
   function showExtractionResults(result, config) {
     currentStep = "VERIFY_FIELDS";
@@ -799,7 +882,15 @@
     // Field rows
     fieldsKeys.forEach(key => {
       const field = fields[key];
-      const label = typeof ExtractionService !== "undefined" ? ExtractionService.getFieldLabel(key) : { en: key, hi: key };
+      // Prefer scanned labels from the form page, then ExtractionService, then raw key
+      let label;
+      if (sessionData.scannedLabels && sessionData.scannedLabels[key]) {
+        label = sessionData.scannedLabels[key];
+      } else if (typeof ExtractionService !== "undefined") {
+        label = ExtractionService.getFieldLabel(key);
+      } else {
+        label = { en: key, hi: key };
+      }
       
       let confLevel = "low";
       let confPct = "0%";
@@ -945,31 +1036,39 @@
 
         Object.keys(sessionData.extractedData.extractedFields).forEach(key => {
           const fieldData = sessionData.extractedData.extractedFields[key];
+          
+          // Read the latest value from the DOM input box in case the user edited it
+          const inputEl = document.getElementById(`field_${key}`);
+          if (inputEl) {
+            fieldData.value = inputEl.value;
+          }
+          
           finalFields[key] = fieldData.value;
           confidenceMap[key] = fieldData.confidence;
         });
 
-        // ─── URL-based mapping resolver ───────────────────────
-        // Pick selectors by matching the active page URL first,
-        // then fall back to the user-selected service mapping.
-        const URL_MAPPING_RULES = [
-          { pattern: "userRegistrationAdditionalDetails", id: "cgedistrict_user_registration" },
-          { pattern: "incomeCertificate",                 id: "income_certificate" },
-          { pattern: "income",                            id: "income_certificate" },
-          { pattern: "birthCertificate",                  id: "birth_certificate" },
-          { pattern: "deathCertificate",                  id: "death_certificate" },
-          { pattern: "domicile",                          id: "domicile_certificate" },
-          { pattern: "casteCertificate",                  id: "caste_certificate" },
-          { pattern: "oldAge",                            id: "old_age_pension" },
-          { pattern: "widow",                             id: "widow_pension" },
-          { pattern: "kisan",                             id: "kisan_registration" },
-          { pattern: "ration",                            id: "ration_card" }
-        ];
-
+        // ─── Use scanned selectors (dynamic) or URL-based mapping (fallback) ───
         let selectors = {};
-        if (typeof getFormMapping !== "undefined") {
+
+        if (sessionData.scannedSelectors && Object.keys(sessionData.scannedSelectors).length > 0) {
+          // Direct selectors from form scanning — most reliable
+          selectors = sessionData.scannedSelectors;
+        } else if (typeof getFormMapping !== "undefined") {
+          // Fallback: URL-based or service-based mapping
           let resolvedId = sessionData.selectedService;
           const lowerUrl = tabUrl.toLowerCase();
+          const URL_MAPPING_RULES = [
+            { pattern: "userRegistrationAdditionalDetails", id: "cgedistrict_user_registration" },
+            { pattern: "incomeCertificate", id: "income_certificate" },
+            { pattern: "birthCertificate", id: "birth_certificate" },
+            { pattern: "deathCertificate", id: "death_certificate" },
+            { pattern: "domicile", id: "domicile_certificate" },
+            { pattern: "casteCertificate", id: "caste_certificate" },
+            { pattern: "oldAge", id: "old_age_pension" },
+            { pattern: "widow", id: "widow_pension" },
+            { pattern: "ration", id: "ration_card" }
+          ];
+
           for (const rule of URL_MAPPING_RULES) {
             if (lowerUrl.includes(rule.pattern.toLowerCase())) {
               resolvedId = rule.id;
@@ -1067,7 +1166,8 @@
       const total = response ? (response.totalFields || 0) : 0;
 
       if (btnAutofill) {
-        btnAutofill.textContent = "✅ फॉर्म भर गया / Form Filled";
+        btnAutofill.disabled = false;
+        btnAutofill.textContent = "✨ जानकारी फिर से भरें / Refill Form";
       }
 
       if (filled === 0 && total > 0) {
@@ -1090,11 +1190,29 @@
       } else {
         showTypingThen(() => {
           addBotMessage(
-            `✅ सफलता! ${filled}/${total} फ़ील्ड्स फॉर्म में भर दिए गए हैं। पीले रंग के फ़ील्ड्स को एक बार जाँच लें।`,
-            `Success! ${filled}/${total} fields filled. Please verify the yellow-highlighted fields.`
+            `✅ सफलता! ${filled}/${total} फ़ील्ड्स फॉर्म में भर दिए गए हैं। पीले रंग के फ़ील्ड्स को एक बार जाँच लें।\n\nयदि फॉर्म सफलतापूर्वक जमा हो गया है, तो नीचे दिए गए बटन पर क्लिक करें।`,
+            `Success! ${filled}/${total} fields filled. Please verify highlighted fields.\n\nClick the button below once the form is successfully submitted.`
           );
 
-          setTimeout(() => showFinalSummary(config), 800);
+          // Render a button to manually trigger the end of the flow
+          const submitBtnId = `btnFormSubmitted_${Date.now()}`;
+          const submitHtml = `
+            <div class="widget-actions">
+              <button class="btn btn-primary w-100" id="${submitBtnId}" style="margin-top: 10px;">
+                ✅ फॉर्म जमा हो गया / Form Submitted
+              </button>
+            </div>
+          `;
+          addBotWidget(submitHtml);
+
+          const btnFormSubmitted = document.getElementById(submitBtnId);
+          if (btnFormSubmitted) {
+            btnFormSubmitted.addEventListener("click", () => {
+              btnFormSubmitted.disabled = true;
+              btnFormSubmitted.textContent = "प्रसंस्करण... / Processing...";
+              showFinalSummary(config);
+            });
+          }
         });
       }
     }

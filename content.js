@@ -66,15 +66,241 @@
     });
   }
 
-  // ─── Auto‐Fill Logic (triggered by messages from panel) ────
+  // ─── Auto‐Fill + Form Scanning (triggered by panel) ────────
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "AUTO_FILL_FORM") {
       const result = autoFillForm(message.fields, message.selectors, message.confidenceMap);
       sendResponse(result);
+    } else if (message.type === "SCAN_FORM_FIELDS") {
+      const scannedFields = scanFormFields();
+      sendResponse(scannedFields);
     }
     return true;
   });
+
+  // ─── Dynamic Form Field Scanner ───────────────────────────
+
+  /**
+   * Scan the current page for all form fields.
+   * Returns an array of discovered fields with their selectors and labels.
+   *
+   * @returns {Array<{ fieldKey, label, labelHi, selector, type, tagName, options? }>}
+   */
+  function scanFormFields() {
+    const fields = [];
+    const seen = new Set();
+
+    // Common Hindi → English label mapping for known government fields
+    const HINDI_LABEL_MAP = {
+      "जन्म की तारीख": "dateOfBirth", "जन्म तिथि": "dateOfBirth",
+      "वार्षिक आय": "annualIncome", "आय": "annualIncome",
+      "पिता का नाम": "fatherName", "पिता": "fatherName",
+      "माँ का नाम": "motherName", "माता का नाम": "motherName",
+      "लिंग": "gender", "कृपया लिंग चुनें": "gender",
+      "जिला": "district", "ज़िला": "district",
+      "पिन कोड": "pinCode", "पिनकोड": "pinCode",
+      "राष्ट्रीयता": "nationality",
+      "वोटर आई.डी": "voterId", "वोटर": "voterId",
+      "जाति": "caste", "कास्ट": "caste",
+      "कास्ट श्रेणी": "casteCategory", "जाति श्रेणी": "casteCategory",
+      "श्रेणी": "category",
+      "शिक्षा": "education", "कृपया शिक्षा का चयन करें": "education",
+      "पेशा": "occupation", "पेशे": "occupation", "व्यवसाय": "occupation",
+      "वैवाहिक स्थिति": "maritalStatus",
+      "बीपीएल संख्या": "bplNumber", "बीपीएल": "bplNumber",
+      "आवेदक का नाम": "applicantName", "नाम": "applicantName",
+      "पता": "address",
+      "मोबाइल": "mobileNumber", "मोबाइल नंबर": "mobileNumber",
+      "आधार": "aadhaarNumber", "आधार नंबर": "aadhaarNumber",
+      "बैंक खाता": "bankAccountNumber",
+      "आईएफएससी": "ifscCode", "ifsc": "ifscCode",
+      "बैंक का नाम": "bankName",
+      "तहसील": "tehsil",
+      "गाँव": "village", "ग्राम": "village"
+    };
+
+    const SKIP_TYPES = new Set(["hidden", "submit", "button", "reset", "file", "image", "password"]);
+
+    const elements = document.querySelectorAll("input, select, textarea");
+
+    elements.forEach((el) => {
+      // Skip unwanted types
+      const inputType = (el.type || "text").toLowerCase();
+      if (SKIP_TYPES.has(inputType)) return;
+
+      // Skip invisible elements
+      if (el.offsetParent === null && el.type !== "hidden") return;
+
+      // Build the best CSS selector
+      const selector = buildSelector(el);
+      if (seen.has(selector)) return;
+      seen.add(selector);
+
+      // Find the label text
+      const labelInfo = findLabelForElement(el);
+      const labelText = labelInfo.text;
+
+      // Derive a fieldKey
+      let fieldKey = null;
+
+      // Try Hindi mapping first
+      const labelLower = labelText.replace(/[*:\s]+/g, " ").trim();
+      for (const [hindiPattern, key] of Object.entries(HINDI_LABEL_MAP)) {
+        if (labelLower.includes(hindiPattern)) {
+          fieldKey = key;
+          break;
+        }
+      }
+
+      // Fallback: use name or id attribute
+      if (!fieldKey && el.name && el.name.length > 1 && !/^\d+$/.test(el.name)) {
+        fieldKey = toCamelCase(el.name);
+      }
+      if (!fieldKey && el.id && el.id.length > 1 && !/^\d+$/.test(el.id)) {
+        fieldKey = toCamelCase(el.id);
+      }
+
+      // Fallback: derive from English part of label
+      if (!fieldKey && labelText) {
+        const englishPart = labelText.replace(/[^\x00-\x7F()]/g, "").replace(/[*:()]/g, "").trim();
+        if (englishPart.length >= 2) {
+          fieldKey = toCamelCase(englishPart);
+        }
+      }
+
+      // Last resort: use selector hash
+      if (!fieldKey) {
+        fieldKey = `field_${el.name || el.id || Math.random().toString(36).slice(2, 8)}`;
+      }
+
+      // Avoid duplicate keys
+      if (fields.find(f => f.fieldKey === fieldKey)) {
+        fieldKey = fieldKey + "_" + (el.name || el.id || fields.length);
+      }
+
+      const fieldInfo = {
+        fieldKey: fieldKey,
+        label: labelInfo.text || fieldKey,
+        labelHi: labelInfo.textHi || "",
+        selector: selector,
+        type: inputType,
+        tagName: el.tagName.toLowerCase()
+      };
+
+      // For select elements, include options
+      if (el.tagName === "SELECT") {
+        fieldInfo.options = Array.from(el.options)
+          .slice(0, 50) // Cap at 50 options
+          .map(opt => ({ value: opt.value, text: opt.textContent.trim() }));
+      }
+
+      fields.push(fieldInfo);
+    });
+
+    return fields;
+  }
+
+  /**
+   * Build the most reliable CSS selector for an element.
+   */
+  function buildSelector(el) {
+    if (el.id) return `#${CSS.escape(el.id)}`;
+    if (el.name) return `${el.tagName.toLowerCase()}[name="${CSS.escape(el.name)}"]`;
+    // Fallback: nth-child-based
+    const parent = el.parentElement;
+    if (parent) {
+      const siblings = Array.from(parent.querySelectorAll(el.tagName.toLowerCase()));
+      const idx = siblings.indexOf(el);
+      if (idx >= 0) {
+        const parentSel = parent.id ? `#${CSS.escape(parent.id)}` : el.tagName.toLowerCase();
+        return `${parentSel} > ${el.tagName.toLowerCase()}:nth-of-type(${idx + 1})`;
+      }
+    }
+    return el.tagName.toLowerCase();
+  }
+
+  /**
+   * Find the label text associated with a form element.
+   */
+  function findLabelForElement(el) {
+    let text = "";
+    let textHi = "";
+
+    // Method 1: explicit <label for="...">
+    if (el.id) {
+      const label = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+      if (label) {
+        text = label.textContent.trim();
+        textHi = text;
+      }
+    }
+
+    // Method 2: parent/ancestor label
+    if (!text) {
+      const parentLabel = el.closest("label");
+      if (parentLabel) {
+        text = parentLabel.textContent.trim();
+        textHi = text;
+      }
+    }
+
+    // Method 3: previous sibling or parent's previous sibling (common in table/div layouts)
+    if (!text) {
+      // Check nearby text: td/th before this element
+      const parent = el.parentElement;
+      if (parent) {
+        const prevEl = parent.previousElementSibling;
+        if (prevEl && prevEl.textContent.trim().length < 100) {
+          text = prevEl.textContent.trim();
+          textHi = text;
+        }
+      }
+    }
+
+    // Method 4: look for preceding heading/span/label text within same row/container
+    if (!text) {
+      const container = el.closest("tr, .form-group, .form-row, .field-wrapper, div");
+      if (container) {
+        const labelEl = container.querySelector("label, .label, th, span.field-label, legend");
+        if (labelEl && labelEl.textContent.trim().length < 100) {
+          text = labelEl.textContent.trim();
+          textHi = text;
+        }
+      }
+    }
+
+    // Method 5: placeholder
+    if (!text && el.placeholder) {
+      text = el.placeholder;
+    }
+
+    // Method 6: title attribute
+    if (!text && el.title) {
+      text = el.title;
+    }
+
+    return { text: text.replace(/\s+/g, " ").trim(), textHi };
+  }
+
+  /**
+   * Convert a string label to camelCase fieldKey.
+   * "Father's Name" → "fathersName"
+   * "date_of_birth" → "dateOfBirth"
+   */
+  function toCamelCase(str) {
+    return str
+      .replace(/['']/g, "")
+      .replace(/[^a-zA-Z0-9]+/g, " ")
+      .trim()
+      .split(/\s+/)
+      .map((word, i) => i === 0
+        ? word.toLowerCase()
+        : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+      )
+      .join("");
+  }
+
 
   /**
    * Auto-fill form fields on the current page.
@@ -190,31 +416,68 @@
    * Fill a form element with a value, triggering appropriate events.
    */
   function fillElement(element, value) {
+    if (!value) return;
     const tagName = element.tagName.toLowerCase();
+    const cleanVal = String(value).trim().toLowerCase();
 
     if (tagName === "select") {
-      // Try to find matching option
-      const options = Array.from(element.options);
-      const match = options.find(opt =>
-        opt.value.toLowerCase() === value.toLowerCase() ||
-        opt.textContent.trim().toLowerCase() === value.toLowerCase()
-      );
-      if (match) {
-        element.value = match.value;
-      } else {
-        // Try partial match
-        const partial = options.find(opt =>
-          opt.textContent.trim().toLowerCase().includes(value.toLowerCase())
-        );
-        if (partial) element.value = partial.value;
+      // Try to find matching option by value first, then text content
+      let bestMatch = null;
+      let highestSimilarity = 0;
+      
+      const valNoPunct = cleanVal.replace(/[^a-z0-9]/g, "");
+
+      for (const opt of element.options) {
+        const optVal = opt.value.toLowerCase();
+        const optText = opt.textContent.trim().toLowerCase();
+        const optTextNoPunct = optText.replace(/[^a-z0-9]/g, "");
+
+        // Exact match
+        if (optVal === cleanVal || optText === cleanVal) {
+          bestMatch = opt;
+          break;
+        }
+
+        // Without punctuation (e.g. "o.b.c." vs "obc")
+        if (optTextNoPunct === valNoPunct) {
+          bestMatch = opt;
+          break;
+        }
+
+        // Partial match
+        if (optText.includes(cleanVal) || cleanVal.includes(optText)) {
+          bestMatch = opt;
+        }
       }
+
+      if (bestMatch) {
+         element.value = bestMatch.value;
+      }
+
     } else if (tagName === "textarea") {
       element.value = value;
     } else if (tagName === "input") {
-      const inputType = element.type?.toLowerCase();
+      const inputType = element.type?.toLowerCase() || "text";
+      
       if (inputType === "checkbox" || inputType === "radio") {
-        const shouldCheck = ["true", "yes", "1", "हाँ"].includes(value.toLowerCase());
+        const shouldCheck = ["true", "yes", "1", "हाँ"].includes(cleanVal);
         element.checked = shouldCheck;
+      } else if (inputType === "date") {
+        // Date inputs REQUIRE yyyy-mm-dd format strictly.
+        // Attempt to parse common formats (dd-mm-yyyy, dd/mm/yyyy) into yyyy-mm-dd
+        let formattedDate = value;
+        const parts = value.split(/[-/.]/);
+        
+        if (parts.length === 3) {
+          if (parts[0].length === 4) {
+             // already yyyy-mm-dd
+             formattedDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+          } else if (parts[2].length === 4) {
+             // assumed dd-mm-yyyy or mm-dd-yyyy (common in India is dd-mm)
+             formattedDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+          }
+        }
+        element.value = formattedDate;
       } else {
         element.value = value;
       }
