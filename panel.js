@@ -646,33 +646,360 @@
       btnContinue.textContent = "✅ पूरा / Completed";
     }
 
-    currentStep = "DONE";
-    headerBadge.textContent = "✓ पूरा";
-    headerSubtitle.textContent = `${sessionData.serviceNameHindi || "सेवा"} — तैयार`;
+    // Proceed to Step 4: Extraction
+    setTimeout(() => startDocumentExtraction(config), 600);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  STEP 4 — DOCUMENT EXTRACTION
+  // ═══════════════════════════════════════════════════════════
+
+  async function startDocumentExtraction(config) {
+    currentStep = "EXTRACTING";
+    headerBadge.textContent = "AI निष्कर्षण";
+    headerSubtitle.textContent = "डेटा निकाला जा रहा है...";
+
+    // Show extraction loader message
+    const loaderId = `loader_${Date.now()}`;
+    const loaderHTML = `
+      <div class="extraction-loader" id="${loaderId}">
+        <div class="loader-header">
+          <div class="loader-spinner"></div>
+          <span>AI दस्तावेज़ पढ़ रहा है...</span>
+        </div>
+        <div class="loader-status" id="status_${loaderId}">Verifying uploaded documents...</div>
+        <div class="loader-skeleton">
+          <div class="skeleton-row w-70"></div>
+          <div class="skeleton-row w-90"></div>
+          <div class="skeleton-row w-50"></div>
+        </div>
+      </div>
+    `;
+    addBotWidget(loaderHTML);
+
+    const statusEl = document.getElementById(`status_${loaderId}`);
+    
+    // Only extract if we have actual files and ExtractionService exists
+    const uploadedFiles = sessionData.documents.filter(d => d.base64);
+    let extractedResult = null;
+
+    // ─── DEBUG LOGGING ───
+    console.log("[Panel] sessionData.documents:", sessionData.documents.length, "total");
+    console.log("[Panel] uploadedFiles (with base64):", uploadedFiles.length);
+    console.log("[Panel] ExtractionService defined:", typeof ExtractionService !== "undefined");
+    console.log("[Panel] config.formFields:", config.formFields);
+    uploadedFiles.forEach((f, i) => {
+      console.log(`[Panel] File ${i}: ${f.fileName}, type=${f.docType}, mime=${f.mimeType}, base64 length=${f.base64 ? f.base64.length : 0}`);
+    });
+
+    if (uploadedFiles.length > 0 && typeof ExtractionService !== "undefined") {
+      try {
+        const fieldsToExtract = config.formFields || [];
+        console.log("[Panel] Calling ExtractionService.extractFields with", fieldsToExtract.length, "fields");
+        
+        extractedResult = await ExtractionService.extractFields(
+          uploadedFiles,
+          fieldsToExtract,
+          sessionData.selectedService,
+          (stage, message) => {
+            console.log("[Panel] Progress:", stage, message);
+            if (statusEl) statusEl.textContent = message;
+          }
+        );
+        console.log("[Panel] Extraction result:", extractedResult);
+      } catch (err) {
+        console.error("[Panel] Extraction FAILED:", err, err.stack);
+        if (statusEl) statusEl.textContent = "⚠️ Error: " + err.message;
+        
+        if (typeof ExtractionService !== "undefined" && config.formFields) {
+           extractedResult = ExtractionService.getManualEntryFields(config.formFields);
+        }
+      }
+    } else {
+      console.warn("[Panel] SKIPPING extraction — uploadedFiles:", uploadedFiles.length, "ExtractionService:", typeof ExtractionService);
+      if (statusEl) statusEl.textContent = "No files uploaded. Proceeding to manual entry.";
+      await delay(1000);
+      if (typeof ExtractionService !== "undefined" && config.formFields) {
+         extractedResult = ExtractionService.getManualEntryFields(config.formFields);
+      } else {
+         extractedResult = { extractedFields: {}, crossDocumentMismatches: [] };
+      }
+    }
+
+    // Remove loader
+    const loaderEl = document.getElementById(loaderId);
+    if (loaderEl && loaderEl.parentElement && loaderEl.parentElement.parentElement) {
+      if (loaderEl.parentElement.parentElement.classList.contains('message')) {
+         loaderEl.parentElement.parentElement.remove();
+      } else {
+         loaderEl.remove();
+      }
+    } else if (loaderEl) {
+       loaderEl.remove();
+    }
+
+    // Show results
+    showExtractionResults(extractedResult, config);
+  }
+
+  function showExtractionResults(result, config) {
+    currentStep = "VERIFY_FIELDS";
+    headerBadge.textContent = "जाँचें";
+    headerSubtitle.textContent = "विवरण की जाँच करें";
+    
+    sessionData.extractedData = result;
+    saveSession();
 
     showTypingThen(() => {
-      const docCount = sessionData.documents.length;
       addBotMessage(
-        `✅ बहुत बढ़िया! ${docCount} दस्तावेज़ तैयार हैं।\n\n👤 ${escapeHTML(sessionData.name)}\n📱 ${sessionData.phone}\n📋 ${sessionData.serviceNameHindi}\n📄 ${docCount} दस्तावेज़`,
-        `All done! ${docCount} documents ready.\n\n${escapeHTML(sessionData.name)}\n${sessionData.phone}\n${sessionData.serviceName}\n${docCount} documents`
+        "📄 दस्तावेज़ों से निम्न जानकारी मिली है। कृपया जाँचें और यदि आवश्यक हो तो सुधारें:",
+        "Found the following information from documents. Please verify and edit if needed:"
       );
 
-      showTypingThen(() => {
-        // Show form URL link
-        if (config.formUrl) {
-          addBotMessage(
-            `🌐 फॉर्म भरने के लिए यहाँ जाएं:\n${config.formUrl}`,
-            `Open the form here:\n${config.formUrl}`
-          );
-        }
+      setTimeout(() => renderExtractedFieldsWidget(result, config), 400);
+    });
+  }
 
-        showTypingThen(() => {
-          addBotMessage(
-            "अगला चरण जल्द उपलब्ध होगा... (फॉर्म ऑटो-फिल)",
-            "Next step coming soon... (form auto-fill)"
-          );
-        });
+  function renderExtractedFieldsWidget(result, config) {
+    const fields = result.extractedFields || {};
+    const mismatches = result.crossDocumentMismatches || [];
+    const fieldsKeys = Object.keys(fields);
+
+    if (fieldsKeys.length === 0) {
+      addBotMessage("फॉर्म के लिए कोई फ़ील्ड निर्धारित नहीं है।", "No fields configured for this form.", { error: true });
+      showFinalSummary(config);
+      return;
+    }
+
+    let widgetHTML = `
+      <div class="extraction-results" id="extractionWidget">
+        <div class="extraction-header">
+          <span>📝 निकाले गए विवरण / Extracted Details</span>
+        </div>
+        <div class="extraction-list">
+    `;
+
+    // Mismatches alert
+    if (mismatches.length > 0) {
+      widgetHTML += `
+        <div class="mismatch-alert">
+          <div class="mismatch-title">⚠️ दस्तावेज़ों में अंतर मिला / Mismatch found</div>
+          <div class="mismatch-list">
+      `;
+      mismatches.forEach(m => {
+        const fieldLabel = typeof ExtractionService !== "undefined" ? ExtractionService.getFieldLabel(m.field).en : m.field;
+        widgetHTML += `• ${fieldLabel} differs: "${escapeHTML(String(m.val1))}" vs "${escapeHTML(String(m.val2))}"<br>`;
       });
+      widgetHTML += `
+          </div>
+        </div>
+      `;
+    }
+
+    // Field rows
+    fieldsKeys.forEach(key => {
+      const field = fields[key];
+      const label = typeof ExtractionService !== "undefined" ? ExtractionService.getFieldLabel(key) : { en: key, hi: key };
+      
+      let confLevel = "low";
+      let confPct = "0%";
+      let confText = "Low Confidence";
+      
+      if (field.source !== "manual") {
+        confLevel = typeof ExtractionService !== "undefined" ? ExtractionService.getConfidenceLevel(field.confidence) : "medium";
+        confPct = Math.round(field.confidence * 100) + "%";
+        if (confLevel === "high") confText = "High Confidence";
+        else if (confLevel === "medium") confText = "Medium Confidence";
+      } else {
+        confText = "Manual Entry";
+      }
+
+      const val = field.value || "";
+
+      widgetHTML += `
+        <div class="field-row">
+          <div class="field-header">
+            <span class="field-label">${escapeHTML(label.hi)} / ${escapeHTML(label.en)}</span>
+            <span class="field-source">📄 src: ${escapeHTML(String(field.source))}</span>
+          </div>
+          <div class="field-input-wrapper">
+            <input type="text" class="field-input" id="field_${key}" data-key="${key}" value="${escapeHTML(val)}" placeholder="दर्ज करें / Enter details...">
+          </div>
+          <div class="confidence-container confidence-${confLevel}">
+            <div class="confidence-bar-bg">
+              <div class="confidence-bar-fill" style="width: ${confPct}"></div>
+            </div>
+            <span class="confidence-text">${confPct} - ${confText}</span>
+          </div>
+        </div>
+      `;
+    });
+
+    widgetHTML += `
+        </div>
+        <div class="extraction-footer">
+          <button class="btn btn-primary checklist-continue-btn" id="btnAutofill">
+            ✨ फॉर्म भरें / Auto-Fill Form
+          </button>
+        </div>
+      </div>
+    `;
+
+    addBotWidget(widgetHTML);
+
+    // Attach autofill listener
+    const btnAutofill = document.getElementById("btnAutofill");
+    if (btnAutofill) {
+      btnAutofill.addEventListener("click", () => executeAutoFill(config));
+    }
+    
+    // Listen for manual edits to update session data
+    fieldsKeys.forEach(key => {
+      const input = document.getElementById(`field_${key}`);
+      if (input) {
+        input.addEventListener("input", (e) => {
+          if (sessionData.extractedData && sessionData.extractedData.extractedFields[key]) {
+             sessionData.extractedData.extractedFields[key].value = e.target.value;
+          }
+        });
+      }
+    });
+
+    scrollToBottom();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  STEP 5 — FORM AUTO-FILL
+  // ═══════════════════════════════════════════════════════════
+
+  function executeAutoFill(config) {
+    const btnAutofill = document.getElementById("btnAutofill");
+    if (btnAutofill) {
+      btnAutofill.disabled = true;
+      btnAutofill.innerHTML = '<span class="loader-spinner" style="width:16px;height:16px;border-width:2px;margin-right:8px;"></span> भर रहा है...';
+    }
+
+    if (!isFormDetected) {
+      addBotMessage(
+        "⚠️ कोई सरकारी फॉर्म नहीं मिला। कृपया पहले पोर्टल खोलें।",
+        "No government form detected. Please open the portal first.",
+        { error: true }
+      );
+      
+      // Let user open the form
+      if (config.formUrl) {
+         addBotMessage(
+           `🌐 फॉर्म पोर्टल यहाँ खोलें:\n<a href="${config.formUrl}" target="_blank" style="color:var(--navy);font-weight:bold;">${config.formUrl}</a>`,
+           "Open the form portal in a new tab."
+         );
+      }
+      
+      if (btnAutofill) {
+        btnAutofill.disabled = false;
+        btnAutofill.textContent = "✨ फॉर्म भरें / Auto-Fill Form";
+      }
+      return;
+    }
+
+    // Get final values and confidence map
+    const finalFields = {};
+    const confidenceMap = {};
+    
+    Object.keys(sessionData.extractedData.extractedFields).forEach(key => {
+      const fieldData = sessionData.extractedData.extractedFields[key];
+      finalFields[key] = fieldData.value;
+      confidenceMap[key] = fieldData.confidence;
+    });
+
+    // Get form mappings
+    let selectors = {};
+    if (typeof getFormMapping !== "undefined") {
+       const mapping = getFormMapping(sessionData.selectedService);
+       if (mapping) selectors = mapping.selectors;
+    }
+
+    // Send payload to content script
+    try {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (!tabs || tabs.length === 0) {
+           handleAutoFillResponse({ error: "No active tab found" }, config);
+           return;
+        }
+        
+        chrome.tabs.sendMessage(
+          tabs[0].id,
+          {
+            type: "AUTO_FILL_FORM",
+            fields: finalFields,
+            selectors: selectors,
+            confidenceMap: confidenceMap
+          },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              handleAutoFillResponse({ error: chrome.runtime.lastError.message }, config);
+            } else {
+              handleAutoFillResponse(response || {}, config);
+            }
+          }
+        );
+      });
+    } catch (e) {
+      handleAutoFillResponse({ error: e.message }, config);
+    }
+  }
+
+  function handleAutoFillResponse(response, config) {
+    const widget = document.getElementById("extractionWidget");
+    if (widget) widget.classList.add("checklist-completed");
+    
+    const btnAutofill = document.getElementById("btnAutofill");
+    if (btnAutofill) {
+      btnAutofill.textContent = "✅ फॉर्म भर गया / Form Filled";
+    }
+
+    if (response && response.error) {
+       addBotMessage(
+         "⚠️ फॉर्म भरने में समस्या आई। आप मैन्युअल रूप से विवरण कॉपी कर सकते हैं।",
+         "Error auto-filling form. You can copy details manually.",
+         { error: true }
+       );
+    } else {
+       const filled = response ? (response.filledCount || 0) : 0;
+       const total = response ? (response.totalFields || 0) : 0;
+       
+       showTypingThen(() => {
+         addBotMessage(
+           `✅ सफलता! ${filled}/${total} फ़ील्ड्स फॉर्म में भर दिए गए हैं। पीले रंग के फ़ील्ड्स को एक बार जाँच लें।`,
+           `Success! ${filled}/${total} fields filled. Please verify the yellow-highlighted fields.`
+         );
+         
+         setTimeout(() => showFinalSummary(config), 800);
+       });
+    }
+  }
+
+  function showFinalSummary(config) {
+    currentStep = "DONE";
+    headerBadge.textContent = "✓ पूरा";
+    
+    showTypingThen(() => {
+      addBotMessage(
+        "🎉 आवेदन प्रक्रिया पूरी हुई। क्या मैं किसी और फॉर्म में मदद कर सकता हूँ?",
+        "Application process complete. Can I help with another form?"
+      );
+      
+      setTimeout(() => {
+        const restartBtn = document.createElement("button");
+        restartBtn.className = "btn btn-secondary";
+        restartBtn.style.marginTop = "12px";
+        restartBtn.style.width = "100%";
+        restartBtn.innerHTML = "🔄 नया आवेदन / New Application";
+        restartBtn.addEventListener("click", () => {
+          showLandingCard();
+        });
+        chatContainer.appendChild(restartBtn);
+        scrollToBottom();
+      }, 500);
     });
   }
 
