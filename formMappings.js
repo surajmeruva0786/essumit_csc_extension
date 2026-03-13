@@ -62,13 +62,37 @@ const FORM_MAPPINGS = {
     domain: "edistrict.cgstate.gov.in",
     selectors: {
       applicantName:  'input[name="applicantName"], #applicantName, #txtApplicantName',
-      fatherName:     'input[name="fatherName"], #fatherName, #txtFatherName',
-      occupation:     'input[name="occupation"], select[name="occupation"], #occupation',
-      annualIncome:   'input[name="annualIncome"], #annualIncome, #txtAnnualIncome',
+      fatherName:     'input[name="fatherName"], #fatherName, #txtFatherName, input[name="54"], #54',
+      occupation:     'input[name="occupation"], select[name="occupation"], #occupation, select[name="126"], #126',
+      annualIncome:   'input[name="annualIncome"], #annualIncome, #txtAnnualIncome, input[name="128"], #128',
       sourceOfIncome: 'input[name="sourceOfIncome"], #sourceOfIncome',
       address:        'textarea[name="address"], input[name="address"], #address',
-      district:       'select[name="district"], #district, #ddlDistrict',
+      district:       'select[name="district"], #district, #ddlDistrict, select[name="196"], #196',
       tehsil:         'select[name="tehsil"], #tehsil, #ddlTehsil'
+    }
+  },
+
+  // ─── CG Edistrict — User Registration (Additional Details) ──
+  // URL: cgedistrict.cgstate.gov.in/userRegistrationAdditionalDetails.do
+  // Field IDs are numeric — discovered by DOM inspection
+  cgedistrict_user_registration: {
+    domain: "cgedistrict.cgstate.gov.in",
+    selectors: {
+      dateOfBirth:     'input[name="7"], #7',
+      annualIncome:    'input[name="128"], #128',
+      casteCategory:   'select[name="98"], #98',
+      caste:           'select[name="436"], #436',
+      fatherName:      'input[name="54"], #54',
+      motherName:      'input[name="2963"], #2963',
+      pinCode:         'input[name="82"], #82',
+      gender:          'select[name="8"], #8',
+      nationality:     'select[name="476"], #476',
+      voterId:         'input[name="230"], #230',
+      district:        'select[name="196"], #196',
+      bplNumber:       'input[name="900"], #900',
+      education:       'select[name="800"], #800',
+      occupation:      'select[name="126"], #126',
+      maritalStatus:   'select[name="92"], #92'
     }
   },
 

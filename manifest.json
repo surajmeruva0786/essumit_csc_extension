@@ -11,6 +11,7 @@
     "sidePanel"
   ],
   "host_permissions": [
+    "<all_urls>",
     "https://api.groq.com/*",
     "https://cdn.jsdelivr.net/*",
     "https://unpkg.com/*",

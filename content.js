@@ -12,6 +12,7 @@
     "umang.gov.in",
     "serviceonline.gov.in",
     "edistrict",
+    "cgedistrict",
     "pmjay.gov.in",
     "pmkisan.gov.in",
     "nrega.nic.in",
@@ -126,6 +127,7 @@
 
   /**
    * Find an element using comma-separated selectors.
+   * Falls back to label text, placeholder, and fuzzy name/id matching.
    */
   function findElement(selectorStr) {
     const selectors = selectorStr.split(",").map(s => s.trim());
@@ -136,7 +138,51 @@
       } catch (e) { /* invalid selector */ }
     }
 
-    // Fallback: search by name/id attributes with fuzzy matching
+    // Fallback 1: extract key hints from selector strings (name="xxx" → xxx)
+    const nameHints = [];
+    for (const sel of selectors) {
+      const nameMatch = sel.match(/\[name=['"](.*?)['"]\]/);
+      if (nameMatch) nameHints.push(nameMatch[1].toLowerCase());
+      const idMatch = sel.match(/#([a-zA-Z0-9_-]+)/);
+      if (idMatch) nameHints.push(idMatch[1].toLowerCase());
+    }
+
+    if (nameHints.length > 0) {
+      // Fallback 2: fuzzy match against all input/select/textarea elements
+      const allFields = Array.from(document.querySelectorAll("input, select, textarea"));
+      for (const el of allFields) {
+        const elName = (el.name || "").toLowerCase();
+        const elId   = (el.id   || "").toLowerCase();
+        const elPlaceholder = (el.placeholder || "").toLowerCase();
+        for (const hint of nameHints) {
+          if (elName.includes(hint) || elId.includes(hint) || elPlaceholder.includes(hint)) {
+            return el;
+          }
+        }
+      }
+
+      // Fallback 3: match by associated <label> text
+      const allLabels = Array.from(document.querySelectorAll("label"));
+      for (const label of allLabels) {
+        const labelText = (label.textContent || "").toLowerCase().replace(/[*:\s]+/g, " ").trim();
+        for (const hint of nameHints) {
+          if (labelText.includes(hint)) {
+            // Find associated input
+            const forAttr = label.htmlFor || label.getAttribute("for");
+            if (forAttr) {
+              const associated = document.getElementById(forAttr);
+              if (associated) return associated;
+            }
+            // Or look for a nearby input sibling
+            const sibling = label.parentElement
+              ? label.parentElement.querySelector("input, select, textarea")
+              : null;
+            if (sibling) return sibling;
+          }
+        }
+      }
+    }
+
     return null;
   }
 

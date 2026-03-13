@@ -872,6 +872,24 @@
   //  STEP 5 — FORM AUTO-FILL
   // ═══════════════════════════════════════════════════════════
 
+  // ─── Known government domains (kept in sync with content.js) ──
+  const GOV_DOMAINS_PANEL = [
+    "digilocker.gov.in", "umang.gov.in", "serviceonline.gov.in",
+    "edistrict", "cgedistrict", "pmjay.gov.in", "pmkisan.gov.in",
+    "nrega.nic.in", "passport.gov.in", "incometax.gov.in",
+    "epfindia.gov.in", "csc.gov.in", "apnacsc.com", "uidai.gov.in",
+    "meeseva", "emitra", "jansunwai", "parivahan.gov.in",
+    "sarathi.parivahan.gov.in", "vahan.parivahan.gov.in", "aadhaar",
+    "pan.utiitsl.com", "tin-nsdl.com", "sw.cg.gov.in",
+    "kisan.cg.nic.in", "khadya.cg.nic.in", "cgstate.gov.in"
+  ];
+
+  function isGovUrl(url) {
+    if (!url) return false;
+    const lower = url.toLowerCase();
+    return GOV_DOMAINS_PANEL.some(d => lower.includes(d));
+  }
+
   function executeAutoFill(config) {
     const btnAutofill = document.getElementById("btnAutofill");
     if (btnAutofill) {
@@ -879,55 +897,92 @@
       btnAutofill.innerHTML = '<span class="loader-spinner" style="width:16px;height:16px;border-width:2px;margin-right:8px;"></span> भर रहा है...';
     }
 
-    if (!isFormDetected) {
-      addBotMessage(
-        "⚠️ कोई सरकारी फॉर्म नहीं मिला। कृपया पहले पोर्टल खोलें।",
-        "No government form detected. Please open the portal first.",
-        { error: true }
-      );
-      
-      // Let user open the form
-      if (config.formUrl) {
-         addBotMessage(
-           `🌐 फॉर्म पोर्टल यहाँ खोलें:\n<a href="${config.formUrl}" target="_blank" style="color:var(--navy);font-weight:bold;">${config.formUrl}</a>`,
-           "Open the form portal in a new tab."
-         );
+    // Re-query the active tab at click time — don't rely on stale isFormDetected at panel init
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (!tabs || tabs.length === 0) {
+        handleAutoFillResponse({ error: "No active tab found" }, config);
+        return;
       }
-      
-      if (btnAutofill) {
-        btnAutofill.disabled = false;
-        btnAutofill.textContent = "✨ फॉर्म भरें / Auto-Fill Form";
-      }
-      return;
-    }
 
-    // Get final values and confidence map
-    const finalFields = {};
-    const confidenceMap = {};
-    
-    Object.keys(sessionData.extractedData.extractedFields).forEach(key => {
-      const fieldData = sessionData.extractedData.extractedFields[key];
-      finalFields[key] = fieldData.value;
-      confidenceMap[key] = fieldData.confidence;
-    });
+      const activeTab = tabs[0];
+      const tabUrl = activeTab.url || "";
 
-    // Get form mappings
-    let selectors = {};
-    if (typeof getFormMapping !== "undefined") {
-       const mapping = getFormMapping(sessionData.selectedService);
-       if (mapping) selectors = mapping.selectors;
-    }
+      // Check: either background already flagged this tab OR the URL itself is a gov domain
+      chrome.storage.session.get(`formDetected_${activeTab.id}`, (stored) => {
+        const storedStatus = stored[`formDetected_${activeTab.id}`];
+        const tabIsGov = (storedStatus && storedStatus.detected) || isGovUrl(tabUrl);
 
-    // Send payload to content script
-    try {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (!tabs || tabs.length === 0) {
-           handleAutoFillResponse({ error: "No active tab found" }, config);
-           return;
+        // Update in-memory flag for future uses
+        if (tabIsGov) {
+          isFormDetected = true;
+          formInfo = storedStatus || { detected: true, domain: new URL(tabUrl).hostname };
         }
-        
+
+        if (!tabIsGov) {
+          addBotMessage(
+            "⚠️ कोई सरकारी फॉर्म नहीं मिला। कृपया पहले पोर्टल खोलें।",
+            "No government form detected. Please open the portal first.",
+            { error: true }
+          );
+
+          if (config.formUrl) {
+            addBotMessage(
+              `🌐 फॉर्म पोर्टल यहाँ खोलें:\n<a href="${config.formUrl}" target="_blank" style="color:var(--navy);font-weight:bold;">${config.formUrl}</a>`,
+              "Open the form portal in a new tab."
+            );
+          }
+
+          if (btnAutofill) {
+            btnAutofill.disabled = false;
+            btnAutofill.textContent = "✨ फॉर्म भरें / Auto-Fill Form";
+          }
+          return;
+        }
+
+        // Proceed with auto-fill
+        const finalFields = {};
+        const confidenceMap = {};
+
+        Object.keys(sessionData.extractedData.extractedFields).forEach(key => {
+          const fieldData = sessionData.extractedData.extractedFields[key];
+          finalFields[key] = fieldData.value;
+          confidenceMap[key] = fieldData.confidence;
+        });
+
+        // ─── URL-based mapping resolver ───────────────────────
+        // Pick selectors by matching the active page URL first,
+        // then fall back to the user-selected service mapping.
+        const URL_MAPPING_RULES = [
+          { pattern: "userRegistrationAdditionalDetails", id: "cgedistrict_user_registration" },
+          { pattern: "incomeCertificate",                 id: "income_certificate" },
+          { pattern: "income",                            id: "income_certificate" },
+          { pattern: "birthCertificate",                  id: "birth_certificate" },
+          { pattern: "deathCertificate",                  id: "death_certificate" },
+          { pattern: "domicile",                          id: "domicile_certificate" },
+          { pattern: "casteCertificate",                  id: "caste_certificate" },
+          { pattern: "oldAge",                            id: "old_age_pension" },
+          { pattern: "widow",                             id: "widow_pension" },
+          { pattern: "kisan",                             id: "kisan_registration" },
+          { pattern: "ration",                            id: "ration_card" }
+        ];
+
+        let selectors = {};
+        if (typeof getFormMapping !== "undefined") {
+          let resolvedId = sessionData.selectedService;
+          const lowerUrl = tabUrl.toLowerCase();
+          for (const rule of URL_MAPPING_RULES) {
+            if (lowerUrl.includes(rule.pattern.toLowerCase())) {
+              resolvedId = rule.id;
+              break;
+            }
+          }
+          const mapping = getFormMapping(resolvedId) || getFormMapping(sessionData.selectedService);
+          if (mapping) selectors = mapping.selectors;
+        }
+
+        // If content script isn't running yet on this tab, inject it first then fill
         chrome.tabs.sendMessage(
-          tabs[0].id,
+          activeTab.id,
           {
             type: "AUTO_FILL_FORM",
             fields: finalFields,
@@ -936,45 +991,112 @@
           },
           (response) => {
             if (chrome.runtime.lastError) {
-              handleAutoFillResponse({ error: chrome.runtime.lastError.message }, config);
+              // Content script may not be injected yet — try scripting API
+              injectAndFill(activeTab.id, finalFields, selectors, confidenceMap, config);
             } else {
               handleAutoFillResponse(response || {}, config);
             }
           }
         );
       });
-    } catch (e) {
-      handleAutoFillResponse({ error: e.message }, config);
+    });
+  }
+
+  function injectAndFill(tabId, finalFields, selectors, confidenceMap, config) {
+    // Inject content script programmatically, then retry
+    if (chrome.scripting) {
+      chrome.scripting.executeScript(
+        { target: { tabId: tabId }, files: ["content.js"] },
+        () => {
+          if (chrome.runtime.lastError) {
+            handleAutoFillResponse({ error: chrome.runtime.lastError.message }, config);
+            return;
+          }
+          // Small delay to let the script initialize
+          setTimeout(() => {
+            chrome.tabs.sendMessage(
+              tabId,
+              { type: "AUTO_FILL_FORM", fields: finalFields, selectors: selectors, confidenceMap: confidenceMap },
+              (response) => {
+                if (chrome.runtime.lastError) {
+                  handleAutoFillResponse({ error: "Could not communicate with page: " + chrome.runtime.lastError.message }, config);
+                } else {
+                  handleAutoFillResponse(response || {}, config);
+                }
+              }
+            );
+          }, 500);
+        }
+      );
+    } else {
+      handleAutoFillResponse({ error: "Cannot inject content script. Please reload the form page and try again." }, config);
     }
   }
 
   function handleAutoFillResponse(response, config) {
     const widget = document.getElementById("extractionWidget");
     if (widget) widget.classList.add("checklist-completed");
-    
+
     const btnAutofill = document.getElementById("btnAutofill");
-    if (btnAutofill) {
-      btnAutofill.textContent = "✅ फॉर्म भर गया / Form Filled";
-    }
 
     if (response && response.error) {
-       addBotMessage(
-         "⚠️ फॉर्म भरने में समस्या आई। आप मैन्युअल रूप से विवरण कॉपी कर सकते हैं।",
-         "Error auto-filling form. You can copy details manually.",
-         { error: true }
-       );
+      // Show actual error + allow retry
+      if (btnAutofill) {
+        btnAutofill.disabled = false;
+        btnAutofill.textContent = "🔄 फिर कोशिश करें / Retry";
+      }
+      addBotMessage(
+        `⚠️ फॉर्म भरने में समस्या आई।\n\n📋 कारण: ${response.error}\n\nपेज को Reload करें और फिर कोशिश करें।`,
+        `Error auto-filling form.\n\nReason: ${response.error}\n\nPlease reload the form page and retry.`,
+        { error: true }
+      );
+
+      // Show manual copy fallback
+      if (sessionData.extractedData) {
+        let manualHTML = `<div class="extraction-results" style="margin-top:8px;"><div class="extraction-header">📋 मैन्युअल कॉपी करें / Copy Manually</div><div class="extraction-list">`;
+        Object.entries(sessionData.extractedData.extractedFields || {}).forEach(([key, field]) => {
+          if (field.value) {
+            manualHTML += `<div class="field-row" style="padding:6px 0;"><span style="font-weight:600;font-size:12px;">${escapeHTML(key)}</span><div style="font-size:14px;color:#1a1a2e;padding:4px 8px;background:#f0f4ff;border-radius:6px;margin-top:2px;">${escapeHTML(field.value)}</div></div>`;
+          }
+        });
+        manualHTML += `</div></div>`;
+        addBotWidget(manualHTML);
+      }
     } else {
-       const filled = response ? (response.filledCount || 0) : 0;
-       const total = response ? (response.totalFields || 0) : 0;
-       
-       showTypingThen(() => {
-         addBotMessage(
-           `✅ सफलता! ${filled}/${total} फ़ील्ड्स फॉर्म में भर दिए गए हैं। पीले रंग के फ़ील्ड्स को एक बार जाँच लें।`,
-           `Success! ${filled}/${total} fields filled. Please verify the yellow-highlighted fields.`
-         );
-         
-         setTimeout(() => showFinalSummary(config), 800);
-       });
+      const filled = response ? (response.filledCount || 0) : 0;
+      const total = response ? (response.totalFields || 0) : 0;
+
+      if (btnAutofill) {
+        btnAutofill.textContent = "✅ फॉर्म भर गया / Form Filled";
+      }
+
+      if (filled === 0 && total > 0) {
+        // Selectors didn't match any fields — show manual copy
+        addBotMessage(
+          `⚠️ फ़ील्ड्स नहीं मिले (${total} में से 0 भरे गए)। फॉर्म के फ़ील्ड नाम अलग हो सकते हैं। नीचे से कॉपी करें।`,
+          `0/${total} fields matched — form field names may differ. Copy values below manually.`,
+          { error: true }
+        );
+        if (sessionData.extractedData) {
+          let manualHTML = `<div class="extraction-results" style="margin-top:8px;"><div class="extraction-header">📋 मैन्युअल कॉपी करें / Copy Manually</div><div class="extraction-list">`;
+          Object.entries(sessionData.extractedData.extractedFields || {}).forEach(([key, field]) => {
+            if (field.value) {
+              manualHTML += `<div class="field-row" style="padding:6px 0;"><span style="font-weight:600;font-size:12px;">${escapeHTML(key)}</span><div style="font-size:14px;color:#1a1a2e;padding:4px 8px;background:#f0f4ff;border-radius:6px;margin-top:2px;">${escapeHTML(field.value)}</div></div>`;
+            }
+          });
+          manualHTML += `</div></div>`;
+          addBotWidget(manualHTML);
+        }
+      } else {
+        showTypingThen(() => {
+          addBotMessage(
+            `✅ सफलता! ${filled}/${total} फ़ील्ड्स फॉर्म में भर दिए गए हैं। पीले रंग के फ़ील्ड्स को एक बार जाँच लें।`,
+            `Success! ${filled}/${total} fields filled. Please verify the yellow-highlighted fields.`
+          );
+
+          setTimeout(() => showFinalSummary(config), 800);
+        });
+      }
     }
   }
 
