@@ -139,60 +139,34 @@
     const card = document.createElement("div");
     card.className = "landing-card";
 
-    if (isFormDetected && formInfo) {
-      card.innerHTML = `
-        <div class="logo">🏛️</div>
-        <h2>CSC सहायक</h2>
-        <p>
-          सरकारी फॉर्म मिला!<br>
-          <strong>${escapeHTML(formInfo.domain)}</strong>
-        </p>
-        <div class="divider"></div>
-        <div class="btn-group">
-          <button class="btn btn-assist" id="btnAssist">
-            <span class="btn-icon">🔍</span>
-            <span class="btn-content">
-              <span class="btn-label">इस फॉर्म में सहायता करें</span>
-              <span class="btn-desc">Assist This Form</span>
-            </span>
-          </button>
-          <button class="btn btn-secondary" id="btnAI">
-            <span class="btn-icon">🤖</span>
-            <span class="btn-content">
-              <span class="btn-label">AI सहायक</span>
-              <span class="btn-desc">AI Assistant</span>
-            </span>
-          </button>
-        </div>
-      `;
-    } else {
-      card.innerHTML = `
-        <div class="logo">🏛️</div>
-        <h2>CSC सहायक</h2>
-        <p>
-          नमस्ते! CSC सहायक में आपका स्वागत है।<br>
-          सरकारी फॉर्म भरने में मदद के लिए नीचे चुनें।
-        </p>
-        <div class="divider"></div>
-        <div class="btn-group">
-          <button class="btn btn-secondary" id="btnAI">
-            <span class="btn-icon">🤖</span>
-            <span class="btn-content">
-              <span class="btn-label">AI सहायक</span>
-              <span class="btn-desc">AI Assistant — Knowledge Base</span>
-            </span>
-          </button>
-          <button class="btn btn-primary" id="btnApply">
-            <span class="btn-icon">📝</span>
-            <span class="btn-content">
-              <span class="btn-label">आवेदन शुरू करें</span>
-              <span class="btn-desc">Start Applying</span>
-            </span>
-          </button>
-        </div>
-      `;
-    }
+    const displayDomain = formInfo ? formInfo.domain : "Portal Detected";
+    const headerTitle = isFormDetected ? "सरकारी फॉर्म मिला!" : "फॉर्म असिस्ट चालू है";
 
+    card.innerHTML = `
+      <div class="logo">🏛️</div>
+      <h2>CSC सहायक</h2>
+      <p>
+        ${headerTitle}<br>
+        <strong>${escapeHTML(displayDomain)}</strong>
+      </p>
+      <div class="divider"></div>
+      <div class="btn-group">
+        <button class="btn btn-assist" id="btnAssist">
+          <span class="btn-icon">🔍</span>
+          <span class="btn-content">
+            <span class="btn-label">इस फॉर्म में सहायता करें</span>
+            <span class="btn-desc">Assist This Form</span>
+          </span>
+        </button>
+        <button class="btn btn-secondary" id="btnAI">
+          <span class="btn-icon">🤖</span>
+          <span class="btn-content">
+            <span class="btn-label">AI सहायक</span>
+            <span class="btn-desc">AI Assistant</span>
+          </span>
+        </button>
+      </div>
+    `;
     chatContainer.appendChild(card);
 
     const btnAI = card.querySelector("#btnAI");
@@ -998,38 +972,10 @@
       const activeTab = tabs[0];
       const tabUrl = activeTab.url || "";
 
-      // Check: either background already flagged this tab OR the URL itself is a gov domain
-      chrome.storage.session.get(`formDetected_${activeTab.id}`, (stored) => {
-        const storedStatus = stored[`formDetected_${activeTab.id}`];
-        const tabIsGov = (storedStatus && storedStatus.detected) || isGovUrl(tabUrl);
-
-        // Update in-memory flag for future uses
-        if (tabIsGov) {
-          isFormDetected = true;
-          formInfo = storedStatus || { detected: true, domain: new URL(tabUrl).hostname };
-        }
-
-        if (!tabIsGov) {
-          addBotMessage(
-            "⚠️ कोई सरकारी फॉर्म नहीं मिला। कृपया पहले पोर्टल खोलें।",
-            "No government form detected. Please open the portal first.",
-            { error: true }
-          );
-
-          if (config.formUrl) {
-            addBotMessage(
-              `🌐 फॉर्म पोर्टल यहाँ खोलें:\n<a href="${config.formUrl}" target="_blank" style="color:var(--navy);font-weight:bold;">${config.formUrl}</a>`,
-              "Open the form portal in a new tab."
-            );
-          }
-
-          if (btnAutofill) {
-            btnAutofill.disabled = false;
-            btnAutofill.textContent = "✨ फॉर्म भरें / Auto-Fill Form";
-          }
-          return;
-        }
-
+        // ─── Universal Auto-Fill ───
+        // We no longer restrict this to explicitly recognized government domains.
+        // The user can attempt auto-fill on any portal (e.g., internships, jobs).
+        
         // Proceed with auto-fill
         const finalFields = {};
         const confidenceMap = {};
@@ -1097,7 +1043,6 @@
             }
           }
         );
-      });
     });
   }
 
