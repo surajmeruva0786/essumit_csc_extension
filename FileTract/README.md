@@ -1,4 +1,4 @@
-# FileTract: AI-Powered Multi-File OCR with Patent-Eligible Confidence Pipeline
+# FileTract: AI-Powered Multi-File OCR with Patent-Eligible Confidence Pipeline.
 
 FileTract is an advanced document intelligence system that extracts structured data from scanned documents using OCR and AI. It features a **patent-pending confidence-weighted pipeline** that significantly improves extraction accuracy for degraded documents through adaptive re-processing and quality-aware field extraction.
 
