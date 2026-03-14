@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Sessions: allow read/write for extension and dashboard (no auth for MVP)
+    // In production, add Firebase Auth and restrict by user/operator
+    match /sessions/{sessionId} {
+      allow read, write: if true;
+    }
+  }
+}
