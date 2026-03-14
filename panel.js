@@ -1048,7 +1048,7 @@
     const modeBadge = result.isOfflineFallback ? "<span style='font-size:10px;background:rgba(255,255,255,0.2);padding:2px 6px;border-radius:6px;margin-left:8px;'>Offline Rules Engine</span>" : "<span style='font-size:10px;background:rgba(255,255,255,0.2);padding:2px 6px;border-radius:6px;margin-left:8px;'>AI Powered</span>";
 
     const uiHtml = `
-      <div class="validation-card" style="margin-top: 10px;">
+      <div class="validation-card" id="csc-validation-card" style="margin-top: 10px;">
         <div class="validation-header">
           <span>🤖 AI सत्यापन / AI Validation ${modeBadge}</span>
           <span class="risk-badge ${riskBadgeClass}">${riskText}</span>
@@ -1067,7 +1067,13 @@
       </div>
     `;
 
-    addBotWidget(uiHtml);
+    // If a validation card already exists, update it in-place; otherwise add a new widget.
+    const existingCard = document.getElementById("csc-validation-card");
+    if (existingCard) {
+      existingCard.outerHTML = uiHtml;
+    } else {
+      addBotWidget(uiHtml);
+    }
 
     // Wire up the new buttons to the autofill flow or cancellation
     const btnCancelApp = document.getElementById("btnCancelApp");
@@ -1325,48 +1331,53 @@
           addBotWidget(manualHTML);
         }
       } else {
-        showTypingThen(() => {
-          addBotMessage(
-            `✅ सफलता! ${filled}/${total} फ़ील्ड्स फॉर्म में भर दिए गए हैं। पीले रंग के फ़ील्ड्स को एक बार जाँच लें।\n\nयदि फॉर्म सफलतापूर्वक जमा हो गया है, तो नीचे दिए गए बटन पर क्लिक करें।`,
-            `Success! ${filled}/${total} fields filled. Please verify highlighted fields.\n\nClick the button below once the form is successfully submitted.`
-          );
-
-          // Allow user to edit and re-validate or re-autofill as many times until they submit
-          const submitBtnId = `btnFormSubmitted_${Date.now()}`;
-          const validateAgainId = `btnValidateAgain_${Date.now()}`;
-          const autofillAgainId = `btnAutofillAgain_${Date.now()}`;
-          const submitHtml = `
+        // Single, updatable summary block instead of new messages every time
+        const summaryHtml = `
+          <div class="autofill-summary-card" id="csc-autofill-summary" style="margin-top:10px;">
+            <div class="validation-summary">
+              <strong>सार / Summary:</strong><br>
+              ✅ सफलता! ${filled}/${total} फ़ील्ड्स फॉर्म में भर दिए गए हैं। पीले रंग के फ़ील्ड्स को एक बार जाँच लें।<br>
+              <span style="font-size:0.9em;color:var(--text-secondary)">
+                Success! ${filled}/${total} fields filled. Please verify highlighted fields.
+              </span>
+            </div>
             <div class="widget-actions" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
-              <button class="btn btn-secondary" id="${validateAgainId}">
+              <button class="btn btn-secondary" id="btnValidateAgain">
                 🔄 फिर सत्यापित करें / Validate Again
               </button>
-              <button class="btn btn-secondary" id="${autofillAgainId}">
+              <button class="btn btn-secondary" id="btnAutofillAgain">
                 ✨ फिर भरें / Auto-Fill Again
               </button>
-              <button class="btn btn-primary w-100" id="${submitBtnId}">
+              <button class="btn btn-primary w-100" id="btnFormSubmitted">
                 ✅ फॉर्म जमा हो गया / Form Submitted
               </button>
             </div>
-          `;
-          addBotWidget(submitHtml);
+          </div>
+        `;
 
-          const btnFormSubmitted = document.getElementById(submitBtnId);
-          if (btnFormSubmitted) {
-            btnFormSubmitted.addEventListener("click", () => {
-              btnFormSubmitted.disabled = true;
-              btnFormSubmitted.textContent = "प्रसंस्करण... / Processing...";
-              showFinalSummary(config);
-            });
-          }
-          const btnValidateAgain = document.getElementById(validateAgainId);
-          if (btnValidateAgain) {
-            btnValidateAgain.addEventListener("click", () => runValidationAndShowDecision(config));
-          }
-          const btnAutofillAgain = document.getElementById(autofillAgainId);
-          if (btnAutofillAgain) {
-            btnAutofillAgain.addEventListener("click", () => executeAutoFill(config));
-          }
-        });
+        const existingSummary = document.getElementById("csc-autofill-summary");
+        if (existingSummary) {
+          existingSummary.outerHTML = summaryHtml;
+        } else {
+          addBotWidget(summaryHtml);
+        }
+
+        const btnFormSubmitted = document.getElementById("btnFormSubmitted");
+        if (btnFormSubmitted) {
+          btnFormSubmitted.onclick = () => {
+            btnFormSubmitted.disabled = true;
+            btnFormSubmitted.textContent = "प्रसंस्करण... / Processing...";
+            showFinalSummary(config);
+          };
+        }
+        const btnValidateAgain = document.getElementById("btnValidateAgain");
+        if (btnValidateAgain) {
+          btnValidateAgain.onclick = () => runValidationAndShowDecision(config);
+        }
+        const btnAutofillAgain = document.getElementById("btnAutofillAgain");
+        if (btnAutofillAgain) {
+          btnAutofillAgain.onclick = () => executeAutoFill(config);
+        }
       }
     }
   }
