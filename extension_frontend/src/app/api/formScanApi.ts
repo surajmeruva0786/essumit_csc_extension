@@ -207,16 +207,16 @@ async function getActiveTabId(): Promise<number | null> {
 }
 
 /**
- * Scan form fields from the active tab using scripting API.
- * Works even when content script is not loaded (e.g. page loaded before extension).
+ * Scan form fields from a tab using scripting API.
+ * @param tabId - Optional; if not provided, uses active tab.
  */
-export async function scanFormFieldsFromActiveTab(): Promise<ScannedField[]> {
-  const tabId = await getActiveTabId();
-  if (!tabId) return [];
+export async function scanFormFieldsFromActiveTab(tabId?: number | null): Promise<ScannedField[]> {
+  const id = tabId ?? (await getActiveTabId());
+  if (!id) return [];
 
   try {
     const results = await chrome.scripting.executeScript({
-      target: { tabId },
+      target: { tabId: id },
       func: scanFormInPage,
     });
     const result = results?.[0]?.result;
@@ -228,17 +228,21 @@ export async function scanFormFieldsFromActiveTab(): Promise<ScannedField[]> {
 }
 
 /**
- * Get semantic field keys (for backend extraction) and scanned fields.
- * Uses semanticKey so backend receives pinCode, maritalStatus, etc. instead of 436, 126.
+ * Get semantic field keys, scanned fields, and form tab ID (for autofill targeting).
  */
 export async function getFormFieldsForExtraction(): Promise<{
   fieldKeys: string[];
   scannedFields: ScannedField[];
+  formTabId: number | null;
 }> {
-  const scanned = await scanFormFieldsFromActiveTab();
+  const formTabId = await getActiveTabId();
+  if (!formTabId) return { fieldKeys: [], scannedFields: [], formTabId: null };
+
+  const scanned = await scanFormFieldsFromActiveTab(formTabId);
   const keys = scanned.map((f) => f.semanticKey).filter(Boolean);
   return {
     fieldKeys: [...new Set(keys)],
     scannedFields: scanned,
+    formTabId,
   };
 }

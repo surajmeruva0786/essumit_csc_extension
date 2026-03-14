@@ -108,6 +108,49 @@ function runOfflineValidation(
   };
 }
 
+/**
+ * Post-process Groq result: ensure empty/missing fields are never marked safe.
+ * If a field has null/empty value and Groq did not emit an issue, add a WARNING.
+ */
+function augmentWithMissingFieldIssues(
+  result: ValidationResult,
+  extractedFields: Record<string, { value: string | null; confidence?: number }>
+): ValidationResult {
+  const augmented: ValidationResult = { ...result, issues: [...(result.issues || [])] };
+  const issuesByField = new Set((augmented.issues || []).map((i) => i.field));
+  let riskScore = typeof augmented.riskScore === 'number' ? augmented.riskScore : 0.1;
+
+  Object.entries(extractedFields).forEach(([key, field]) => {
+    const val = field?.value;
+    const isEmpty = !val || String(val).trim() === '' || String(val).trim().toLowerCase() === 'खाली' || String(val).trim().toLowerCase() === 'empty';
+    if (isEmpty && !issuesByField.has(key)) {
+      augmented.issues!.push({
+        field: key,
+        severity: 'WARNING',
+        message: `The field '${key}' is empty or missing and should be checked before submission.`,
+        messageHindi: `फ़ील्ड '${key}' खाली है या भरी नहीं गई है, कृपया जमा करने से पहले जाँचें।`,
+        suggestion: 'Fill this field as per the portal requirements or confirm it is truly optional.',
+      });
+      riskScore += 0.15;
+    }
+  });
+
+  const overallRisk: 'HIGH' | 'MEDIUM' | 'LOW' =
+    riskScore >= 0.6 ? 'HIGH' : riskScore >= 0.3 ? 'MEDIUM' : 'LOW';
+  const eligibilityVerdict: ValidationResult['eligibilityVerdict'] =
+    overallRisk === 'HIGH' ? 'LIKELY_REJECTED' : overallRisk === 'MEDIUM' ? 'NEEDS_REVIEW' : 'LIKELY_APPROVED';
+
+  augmented.riskScore = Math.min(1, riskScore);
+  augmented.overallRisk = overallRisk;
+  augmented.eligibilityVerdict = eligibilityVerdict;
+  if (augmented.issues!.length > 0 && !augmented.summaryHindi?.includes('खाली')) {
+    augmented.summaryHindi = 'कुछ फ़ील्ड खाली या अधूरे हैं — कृपया जाँचें।';
+    augmented.summaryEnglish = 'Some fields are empty or incomplete — please review before submission.';
+  }
+
+  return augmented;
+}
+
 export async function validateExtraction(
   backendServiceId: string,
   extractedFields: Record<string, { value: string | null; confidence?: number }>
@@ -153,7 +196,8 @@ If critical rules are violated (age mismatch, missing mandatory fields), set ove
 If data looks good with minor warnings, set MEDIUM and NEEDS_REVIEW.
 If everything aligns with rules, set LOW and LIKELY_APPROVED.
 
-Very important: when you populate the "field" property for each issue, you MUST use exactly one of these keys from the Extracted Information object:
+CRITICAL: For EVERY field where the value is null, empty string, "खाली", or clearly missing, you MUST create at least one issue for that specific field (WARNING or CRITICAL). Do NOT mark the application as fully compliant if any such fields exist.
+When populating "field" in each issue, use exactly one of these keys: 
 ${fieldKeys.join(', ') || '(no fields provided)'}`;
 
   const apiKey = await getApiKey();
@@ -173,8 +217,9 @@ ${fieldKeys.join(', ') || '(no fields provided)'}`;
       else if (parsed.startsWith('```')) parsed = parsed.replace(/```\n?/, '').replace(/```$/, '');
       const result = JSON.parse(parsed.trim()) as ValidationResult;
       if (result && typeof result.overallRisk === 'string') {
-        result.isOfflineFallback = false;
-        return result;
+        const augmented = augmentWithMissingFieldIssues(result, extractedFields);
+        augmented.isOfflineFallback = false;
+        return augmented;
       }
     } catch (e) {
       console.warn('[CSC Sahayak] Groq validation parse error:', e);

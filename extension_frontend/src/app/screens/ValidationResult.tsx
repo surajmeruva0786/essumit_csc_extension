@@ -8,7 +8,7 @@ import { getBackendServiceId } from '../config/serviceConfig';
 export default function ValidationResult() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { extraction, serviceId, name, mobile } = location.state || {};
+  const { extraction, serviceId, name, mobile, formScannedFields, formTabId } = location.state || {};
   const backendServiceId = serviceId ? getBackendServiceId(serviceId) : 'birth_certificate';
 
   const [validation, setValidation] = useState<ValidationResultType | null>(null);
@@ -214,11 +214,15 @@ export default function ValidationResult() {
           </button>
         </div>
         <button
-          onClick={() => navigate(-1)}
+          onClick={() =>
+            navigate('/data-review', {
+              state: { extraction, serviceId, name, mobile, formScannedFields, formTabId },
+            })
+          }
           className="w-full h-9 rounded-md bg-surface border border-border-custom text-navy text-sm font-medium flex items-center justify-center gap-1.5 hover:bg-slate-50 transition-colors"
         >
           <ChevronLeft className="w-4 h-4" strokeWidth={2} />
-          <span>पीछे जाएं</span>
+          <span>संपादित करें / पीछे जाएं</span>
         </button>
       </div>
     </div>

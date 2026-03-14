@@ -48,14 +48,15 @@ export default function DocumentChecklist() {
   const [filesById, setFilesById] = useState<Record<string, File>>({});
   const [formFieldsCache, setFormFieldsCache] = useState<{
     fieldKeys: string[];
-    scannedFields: Array<{ fieldKey: string; label: string; labelHi: string }>;
+    scannedFields: Array<{ fieldKey: string; label: string; labelHi: string; selector?: string; semanticKey?: string }>;
+    formTabId: number | null;
   } | null>(null);
 
   // Scan form from active tab when Documents screen loads (ensure portal/form tab is active)
   useEffect(() => {
-    getFormFieldsForExtraction().then(({ fieldKeys, scannedFields }) => {
+    getFormFieldsForExtraction().then(({ fieldKeys, scannedFields, formTabId }) => {
       if (fieldKeys.length > 0) {
-        setFormFieldsCache({ fieldKeys, scannedFields });
+        setFormFieldsCache({ fieldKeys, scannedFields, formTabId });
       }
     });
   }, [serviceId]);
@@ -129,6 +130,7 @@ export default function DocumentChecklist() {
           files,
           formFieldKeys: formFieldsCache?.fieldKeys,
           formScannedFields: formFieldsCache?.scannedFields,
+          formTabId: formFieldsCache?.formTabId ?? null,
         },
       });
     }

@@ -78,10 +78,25 @@ export async function saveSession(payload: SessionPayload): Promise<SavedSession
   });
 }
 
-export function getWhatsAppShareLink(mobile: string, refId: string, serviceName: string): string {
+export interface FieldEntry {
+  labelHi: string;
+  value: string;
+}
+
+export function getWhatsAppShareLink(
+  mobile: string,
+  refId: string,
+  serviceName: string,
+  citizenName?: string | null,
+  fieldEntries?: FieldEntry[]
+): string {
   const clean = String(mobile).replace(/\D/g, '');
-  const text = encodeURIComponent(
-    `आपका आवेदन जमा हो गया। Ref: ${refId} | ${serviceName} | CSC Sahayak`
-  );
-  return `https://wa.me/91${clean}?text=${text}`;
+  let text = `आपका आवेदन जमा हो गया।\nRef: ${refId}\nसेवा: ${serviceName}`;
+  if (citizenName) text += `\nनाम: ${citizenName}`;
+  text += `\nतारीख: ${new Date().toLocaleString('hi-IN')}`;
+  if (fieldEntries?.length) {
+    text += '\n\nनिकाली गई जानकारी:\n' + fieldEntries.slice(0, 12).map((e) => `${e.labelHi}: ${e.value}`).join('\n');
+  }
+  text += '\n— CSC Sahayak';
+  return `https://wa.me/91${clean}?text=${encodeURIComponent(text)}`;
 }

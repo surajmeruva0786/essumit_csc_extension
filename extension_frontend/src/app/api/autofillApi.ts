@@ -16,12 +16,13 @@ export interface AutofillResult {
 }
 
 /**
- * Fill the form in the CURRENTLY ACTIVE tab (no new tab).
- * Use formScannedFields to get real selectors from the page (handles numeric IDs).
+ * Fill the form in the form tab. Uses formTabId when provided (from scan), otherwise
+ * falls back to the active tab. Injects content.js if sendMessage fails (script not loaded).
  */
 export async function triggerAutofillInCurrentTab(
   extractedFields: Record<string, { value: string | null; confidence?: number }>,
-  formScannedFields: ScannedFieldForAutofill[]
+  formScannedFields: ScannedFieldForAutofill[],
+  formTabId?: number | null
 ): Promise<AutofillResult | null> {
   if (!formScannedFields?.length) return null;
 
@@ -44,19 +45,41 @@ export async function triggerAutofillInCurrentTab(
 
   if (Object.keys(fields).length === 0) return null;
 
-  return new Promise((resolve) => {
+  const targetTabId: number | null = await new Promise((res) => {
+    if (typeof formTabId === 'number' && formTabId > 0) {
+      chrome.tabs.get(formTabId, (tab) => {
+        if (chrome.runtime.lastError || !tab) res(null);
+        else res(tab.id ?? null);
+      });
+      return;
+    }
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const tab = tabs[0];
-      if (!tab?.id) {
-        resolve(null);
-        return;
-      }
+      res(tabs[0]?.id ?? null);
+    });
+  });
+
+  if (!targetTabId) return null;
+
+  // Focus the form tab so user sees the autofill
+  try {
+    await chrome.tabs.update(targetTabId, { active: true });
+  } catch {
+    // Ignore - may fail in some contexts
+  }
+
+  const sendAutofill = (): Promise<AutofillResult | null> =>
+    new Promise((resolve) => {
       chrome.tabs.sendMessage(
-        tab.id,
+        targetTabId,
         { type: 'AUTO_FILL_FORM', fields, selectors: selectorsFromScan, confidenceMap },
         (response: AutofillResult) => {
           if (chrome.runtime.lastError) {
-            console.warn('[autofillApi]', chrome.runtime.lastError.message);
+            const msg = chrome.runtime.lastError.message || '';
+            if (msg.includes('Receiving end does not exist') || msg.includes('Could not establish connection')) {
+              resolve(null);
+              return;
+            }
+            console.warn('[autofillApi]', msg);
             resolve(null);
             return;
           }
@@ -64,7 +87,20 @@ export async function triggerAutofillInCurrentTab(
         }
       );
     });
-  });
+
+  let result = await sendAutofill();
+  if (result === null) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: targetTabId },
+        files: ['content.js'],
+      });
+      result = await sendAutofill();
+    } catch (e) {
+      console.warn('[autofillApi] Content script injection failed', e);
+    }
+  }
+  return result;
 }
 
 export async function triggerAutofill(

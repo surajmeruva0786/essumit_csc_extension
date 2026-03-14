@@ -15,7 +15,7 @@ const genericStatusMessages = [
 export default function AIExtraction() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { name, mobile, serviceId, files, formFieldKeys, formScannedFields: formScannedFieldsFromState } = location.state || {};
+  const { name, mobile, serviceId, files, formFieldKeys, formScannedFields: formScannedFieldsFromState, formTabId: formTabIdFromState } = location.state || {};
   const service = serviceId ? getServiceById(serviceId) : null;
   const [currentFileIndex, setCurrentFileIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -42,11 +42,13 @@ export default function AIExtraction() {
         // 1. Use form fields from state (scanned on Document Checklist) or scan now
         let fieldKeys = Array.isArray(formFieldKeys) ? formFieldKeys : [];
         let scannedFields = Array.isArray(formScannedFieldsFromState) ? formScannedFieldsFromState : [];
+        let formTabId = typeof formTabIdFromState === 'number' ? formTabIdFromState : null;
 
         if (fieldKeys.length === 0) {
           const scanned = await getFormFieldsForExtraction();
           fieldKeys = scanned.fieldKeys;
           scannedFields = scanned.scannedFields;
+          formTabId = scanned.formTabId;
         }
 
         if (cancelled) return;
@@ -67,6 +69,7 @@ export default function AIExtraction() {
             serviceId,
             extraction: result,
             formScannedFields: scannedFields.length > 0 ? scannedFields : undefined,
+            formTabId,
           },
         });
       } catch (e: unknown) {
@@ -79,7 +82,7 @@ export default function AIExtraction() {
     return () => {
       cancelled = true;
     };
-  }, [fileList, service, navigate, name, mobile, serviceId, formFieldKeys, formScannedFieldsFromState]);
+  }, [fileList, service, navigate, name, mobile, serviceId, formFieldKeys, formScannedFieldsFromState, formTabIdFromState]);
 
   // Cycle through file names during loading
   useEffect(() => {

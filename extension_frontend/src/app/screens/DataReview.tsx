@@ -12,7 +12,7 @@ import { getFieldLabel } from '../config/fieldLabels';
 export default function DataReview() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { extraction, serviceId, name, mobile, formScannedFields } = location.state || {};
+  const { extraction, serviceId, name, mobile, formScannedFields, formTabId } = location.state || {};
   const serviceConfig = serviceId ? getServiceConfig(serviceId) : null;
   const backendServiceId = serviceId ? getBackendServiceId(serviceId) : 'birth_certificate';
 
@@ -30,6 +30,7 @@ export default function DataReview() {
   const [validation, setValidation] = useState<ValidationResultType | null>(null);
   const [validationLoading, setValidationLoading] = useState(true);
   const [autofillLoading, setAutofillLoading] = useState(false);
+  const [autofillFailed, setAutofillFailed] = useState(false);
 
   useEffect(() => {
     if (!extraction || !extraction.extractedFields || !Object.keys(extraction.extractedFields).length) {
@@ -124,25 +125,82 @@ export default function DataReview() {
 
   const warningCount = fields.filter((f) => f.confidence < 85).length;
 
-  const handleNext = async () => {
-    if (!extraction?.extractedFields || !serviceId) {
-      navigate('/validation', { state: { extraction, serviceId, name, mobile, formScannedFields } });
-      return;
-    }
+  // Build extractedFields from current (edited) fields for autofill, validation, and navigation
+  const getEditedExtractedFields = () => {
+    const out: Record<string, { value: string | null; confidence?: number }> = {};
+    fields.forEach((f) => {
+      out[f.id] = { value: f.value || null, confidence: f.confidence / 100 };
+    });
+    return out;
+  };
 
-    // Autofill in CURRENT tab (form should already be open)
+  const handleRevalidate = async () => {
+    if (!fields.length) return;
+    setValidationLoading(true);
+    try {
+      const editedFields = getEditedExtractedFields();
+      const result = await validateExtraction(backendServiceId || 'birth_certificate', editedFields);
+      setValidation(result);
+      const issuesByField: Record<string, { message: string; suggestion?: string }> = {};
+      result.issues?.forEach((issue) => {
+        if (issue.field) {
+          issuesByField[issue.field] = {
+            message: issue.messageHindi || issue.message,
+            suggestion: issue.suggestion,
+          };
+        }
+      });
+      setFields((prev) =>
+        prev.map((f) => ({
+          ...f,
+          validationMsg: issuesByField[f.id]?.message,
+          validationSuggestion: issuesByField[f.id]?.suggestion,
+        }))
+      );
+    } catch (e) {
+      console.warn('[DataReview] Re-validation error', e);
+    } finally {
+      setValidationLoading(false);
+    }
+  };
+
+  const handleAutofill = async () => {
+    if (!formScannedFields?.length || !fields.length) return;
+    setAutofillFailed(false);
     setAutofillLoading(true);
     try {
-      if (formScannedFields?.length) {
-        await triggerAutofillInCurrentTab(extraction.extractedFields, formScannedFields);
-      }
+      const editedFields = getEditedExtractedFields();
+      const result = await triggerAutofillInCurrentTab(
+        editedFields,
+        formScannedFields,
+        typeof formTabId === 'number' ? formTabId : undefined
+      );
+      if (result === null) setAutofillFailed(true);
     } catch (e) {
       console.warn('[DataReview] Autofill error', e);
+      setAutofillFailed(true);
     } finally {
       setAutofillLoading(false);
     }
+  };
 
-    navigate('/validation', { state: { extraction, serviceId, name, mobile, formScannedFields } });
+  const handleNext = () => {
+    if (!extraction || !serviceId) return;
+    const editedFields = getEditedExtractedFields();
+    const editedExtraction = {
+      ...extraction,
+      extractedFields: editedFields,
+    };
+    navigate('/validation', {
+      state: {
+        extraction: editedExtraction,
+        serviceId,
+        name,
+        mobile,
+        formScannedFields,
+        formTabId,
+      },
+    });
   };
 
   return (
@@ -175,14 +233,24 @@ export default function DataReview() {
                   : 'bg-green-light border-green'
               }`}
             >
-              <div className="flex items-start gap-2">
-                <Shield className="w-4 h-4 flex-shrink-0 mt-0.5" strokeWidth={2} />
-                <div className="text-xs">
-                  <div className="font-semibold text-navy mb-0.5">
-                    AI सत्यापन: {validation.summaryHindi || validation.summaryEnglish}
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2 flex-1">
+                  <Shield className="w-4 h-4 flex-shrink-0 mt-0.5" strokeWidth={2} />
+                  <div className="text-xs">
+                    <div className="font-semibold text-navy mb-0.5">
+                      AI सत्यापन: {validation.summaryHindi || validation.summaryEnglish}
+                    </div>
+                    <div className="text-muted-text">{validation.summaryEnglish}</div>
                   </div>
-                  <div className="text-muted-text">{validation.summaryEnglish}</div>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleRevalidate}
+                  disabled={validationLoading}
+                  className="shrink-0 px-2 py-1 rounded text-[10px] font-medium bg-white border border-slate-300 text-slate-600 hover:bg-slate-50"
+                >
+                  फिर सत्यापित करें
+                </button>
               </div>
             </div>
           </div>
@@ -223,13 +291,25 @@ export default function DataReview() {
                           placeholder={field.confidence === 0 ? 'खाली' : ''}
                           className={`w-full text-sm font-semibold text-navy bg-transparent border-none outline-none focus:ring-0 p-0 placeholder:text-slate-400 ${confidenceStyle.ringClass}`}
                         />
-                        {/* AI Validation summary for this field */}
-                        {field.validationMsg && (
-                          <div className="mt-2 text-[10px] text-slate-600 bg-white/60 rounded px-2 py-1 border border-slate-200">
-                            <span className="font-medium">AI: </span>
-                            {field.validationMsg}
-                            {field.validationSuggestion && (
-                              <div className="mt-0.5 text-saffron">→ {field.validationSuggestion}</div>
+                        {/* AI Validation for this field - always show when validation done */}
+                        {validation && !validationLoading && (
+                          <div
+                            className={`mt-2 text-[10px] rounded px-2 py-1 flex items-center gap-1 ${
+                              field.validationMsg
+                                ? 'bg-amber-50 border border-amber-200 text-amber-800'
+                                : 'bg-green-light/70 border border-green/30 text-green-800'
+                            }`}
+                          >
+                            <Shield className="w-3 h-3 flex-shrink-0" strokeWidth={2} />
+                            {field.validationMsg ? (
+                              <>
+                                <span>{field.validationMsg}</span>
+                                {field.validationSuggestion && (
+                                  <span className="text-saffron">→ {field.validationSuggestion}</span>
+                                )}
+                              </>
+                            ) : (
+                              <span>AI ✓ नियमों के अनुसार</span>
                             )}
                           </div>
                         )}
@@ -264,15 +344,32 @@ export default function DataReview() {
         </div>
       </div>
 
-      <div className="px-4 pb-2">
+      <div className="px-4 pb-2 space-y-2">
+        {autofillFailed && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            फॉर्म भर नहीं सका। फॉर्म वाला टैब खुला रखें, पेज रिफ्रेश करें और फिर से कोशिश करें।
+          </div>
+        )}
+        {formScannedFields?.length ? (
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={handleAutofill}
+              disabled={autofillLoading}
+              className="px-4 py-1.5 rounded-md text-xs font-medium bg-green-light text-green border border-green/30 hover:bg-green/10"
+            >
+              {autofillLoading ? 'फॉर्म भर रहा है...' : 'फॉर्म ऑटो-फिल करें'}
+            </button>
+          </div>
+        ) : null}
         <p className="text-[10px] text-muted-text text-center">
-          फॉर्म वाला टैब खुला रखें, फिर ऑटो-फिल दबाएं
+          संपादित करें, फिर ऑटो-फिल या सत्यापन दोहरा सकते हैं
         </p>
       </div>
       <NavigationButtons
         onNext={handleNext}
-        nextLabel={autofillLoading ? 'फॉर्म भर रहा है...' : 'फॉर्म ऑटो-फिल करें'}
-        nextDisabled={autofillLoading}
+        nextLabel="सत्यापन देखें"
+        nextDisabled={false}
       />
     </div>
   );

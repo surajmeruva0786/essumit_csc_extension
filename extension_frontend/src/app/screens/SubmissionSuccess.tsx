@@ -1,8 +1,9 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { CheckCircle2, FileText, MessageSquare, ChevronRight, Printer } from 'lucide-react';
 import { saveSession, getWhatsAppShareLink } from '../api/sessionApi';
 import { getServiceById } from '../config/services';
+import { getFieldLabel } from '../config/fieldLabels';
 
 export default function SubmissionSuccess() {
   const navigate = useNavigate();
@@ -44,11 +45,38 @@ export default function SubmissionSuccess() {
       });
   }, [extraction, serviceId, name, mobile, validation, saved]);
 
-  const whatsappUrl = mobile ? getWhatsAppShareLink(mobile, refId, service?.nameHi || 'सेवा') : null;
+  const fieldEntries = useMemo(() => {
+    const extracted = extraction?.extractedFields || {};
+    return Object.entries(extracted)
+      .map(([key, entry]: [string, unknown]) => {
+        const e = entry as { value?: string | null } | null;
+        const val = e?.value;
+        if (val == null || !String(val).trim()) return null;
+        const { hi } = getFieldLabel(key);
+        return { labelHi: hi || key, value: String(val).trim() };
+      })
+      .filter((x): x is { labelHi: string; value: string } => x != null);
+  }, [extraction]);
+
+  const whatsappUrl = mobile
+    ? getWhatsAppShareLink(mobile, refId, service?.nameHi || 'सेवा', name, fieldEntries)
+    : null;
+
+  const esc = (s: string) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
   const handlePrint = () => {
     if (!printRef.current) return;
-    const printContent = printRef.current.innerHTML;
+    const extracted = extraction?.extractedFields || {};
+    const rows = Object.entries(extracted)
+      .map(([key, entry]: [string, unknown]) => {
+        const e = entry as { value?: string | null } | null;
+        const val = e?.value;
+        if (val == null || !String(val).trim()) return null;
+        const { hi } = getFieldLabel(key);
+        return `<tr><td>${esc(hi || key)}</td><td>${esc(String(val))}</td></tr>`;
+      })
+      .filter(Boolean)
+      .join('');
     const win = window.open('', '_blank');
     if (!win) return;
     win.document.write(`
@@ -63,6 +91,7 @@ export default function SubmissionSuccess() {
           td { padding: 6px 0; border-bottom: 1px solid #e2e8f0; }
           td:first-child { color: #64748b; font-size: 12px; width: 40%; }
           .footer { margin-top: 24px; font-size: 11px; color: #64748b; }
+          .fields-header { margin-top: 16px; font-weight: 600; font-size: 13px; color: #1A2332; }
         </style>
         </head>
         <body>
@@ -70,11 +99,12 @@ export default function SubmissionSuccess() {
           <p style="color:#64748b;font-size:12px;">Application Submitted Successfully</p>
           <div class="ref">${refId}</div>
           <table>
-            <tr><td>नागरिक</td><td>${name || '-'}</td></tr>
-            <tr><td>मोबाइल</td><td>${mobile || '-'}</td></tr>
-            <tr><td>सेवा</td><td>${service?.nameHi || serviceId || '-'}</td></tr>
-            <tr><td>तारीख</td><td>${new Date().toLocaleString('hi-IN')}</td></tr>
+            <tr><td>नागरिक</td><td>${esc(name || '-')}</td></tr>
+            <tr><td>मोबाइल</td><td>${esc(mobile || '-')}</td></tr>
+            <tr><td>सेवा</td><td>${esc(service?.nameHi || serviceId || '-')}</td></tr>
+            <tr><td>तारीख</td><td>${esc(new Date().toLocaleString('hi-IN'))}</td></tr>
           </table>
+          ${rows ? `<div class="fields-header">निकाली गई जानकारी / Extracted Fields</div><table>${rows}</table>` : ''}
           <div class="footer">CSC Sahayak | निर्णय आपका है — डेटा सुरक्षित है</div>
         </body>
       </html>
