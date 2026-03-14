@@ -1063,12 +1063,45 @@
       finalFields[key] = fieldData.value;
     });
 
+    // Lightweight use of the online model as an auxiliary signal (low weight).
+    // Currently implemented for birth_certificate as an example.
+    try {
+      const svc = sessionData.selectedService || config.serviceId || "default";
+      if (svc === "birth_certificate" && typeof OnlineModel !== "undefined" && OnlineModel.predictRejectionProbability) {
+        // Build a minimal pseudo-session for feature extraction
+        const extracted = sessionData.extractedData.extractedFields || {};
+        const confidence = {};
+        Object.keys(extracted).forEach(k => {
+          const v = extracted[k];
+          confidence[k] = typeof v.confidence === "number" ? v.confidence : 0;
+        });
+        const pseudoSession = {
+          extractedFields: Object.fromEntries(
+            Object.entries(extracted).map(([k, v]) => [k, v && v.value != null ? v.value : null])
+          ),
+          confidenceScores: confidence,
+          aiValidationResult: null
+        };
+        const prob = await OnlineModel.predictRejectionProbability(pseudoSession);
+        if (typeof prob === "number" && !isNaN(prob)) {
+          // Expose as a special meta-field so Groq can see it, but keep LLM as the main decision-maker.
+          finalFields._modelRejectionProb = prob.toFixed(3);
+        }
+      }
+    } catch (e) {
+      console.warn("[Panel] OnlineModel prediction failed (ignored)", e);
+    }
+
     try {
       // Call AIAssistant using Groq or Fallback
       const result = await AIAssistant.validateApplication(
         sessionData.selectedService || config.serviceId || "default",
         finalFields
       );
+
+      // Cache latest validation for training / SMS
+      sessionData.lastValidationResult = result;
+      saveSession();
 
       // Apply validation inline to the extracted fields widget instead of a separate message box
       applyFieldValidationToWidget(result);
@@ -1526,9 +1559,10 @@
 
         const btnFormSubmitted = document.getElementById("btnFormSubmitted");
         if (btnFormSubmitted) {
-          btnFormSubmitted.onclick = () => {
+          btnFormSubmitted.onclick = async () => {
             btnFormSubmitted.disabled = true;
             btnFormSubmitted.textContent = "प्रसंस्करण... / Processing...";
+            await finalizeOcrSession("SUBMITTED");
             showFinalSummary(config);
           };
         }
@@ -1549,11 +1583,101 @@
     headerBadge.textContent = "✓ पूरा";
     
     showTypingThen(() => {
+      const name = sessionData.citizenName || sessionData.name || "नागरिक";
+      const service = sessionData.serviceNameHindi || sessionData.serviceName || "सेवा";
+      const phone = sessionData.citizenPhone || sessionData.phone || "";
+
       addBotMessage(
         "🎉 आवेदन प्रक्रिया पूरी हुई। क्या मैं किसी और फॉर्म में मदद कर सकता हूँ?",
         "Application process complete. Can I help with another form?"
       );
-      
+
+      // WhatsApp + Print actions
+      const actionsWrapper = document.createElement("div");
+      actionsWrapper.className = "widget-actions";
+      actionsWrapper.style.marginTop = "10px";
+
+      const waBtn = document.createElement("button");
+      waBtn.className = "btn btn-primary";
+      waBtn.style.width = "100%";
+      waBtn.style.marginBottom = "8px";
+      waBtn.innerHTML = "📱 WhatsApp संदेश भेजें / Send WhatsApp Message";
+
+      const printBtn = document.createElement("button");
+      printBtn.className = "btn btn-secondary";
+      printBtn.style.width = "100%";
+      printBtn.innerHTML = "🖨️ रसीद प्रिंट करें / Print Receipt";
+
+      actionsWrapper.appendChild(waBtn);
+      actionsWrapper.appendChild(printBtn);
+      chatContainer.appendChild(actionsWrapper);
+
+      waBtn.addEventListener("click", () => {
+        if (!phone) {
+          addBotMessage(
+            "⚠️ मोबाइल नंबर उपलब्ध नहीं है।",
+            "Citizen phone number is not available.",
+            { error: true }
+          );
+          return;
+        }
+        const text = [
+          `नमस्ते ${name}!`,
+          `आपका ${service} आवेदन सफलतापूर्वक जमा हो गया है।`,
+          `यह संदेश CSC सहायक के माध्यम से भेजा गया है।`
+        ].join("\n");
+        const waPhone = phone.replace(/\D/g, "");
+        const url = `https://wa.me/91${waPhone}?text=${encodeURIComponent(text)}`;
+        window.open(url, "_blank");
+      });
+
+      printBtn.addEventListener("click", () => {
+        const refId = sessionData.lastSavedSessionId || "-";
+        const win = window.open("", "_blank");
+        if (!win) return;
+        const now = new Date().toLocaleString("hi-IN");
+        const extracted = sessionData.extractedData ? sessionData.extractedData.extractedFields || {} : {};
+        let rows = "";
+        Object.entries(extracted).forEach(([key, field]) => {
+          const val = field && field.value != null ? field.value : "";
+          rows += `<tr><td style="padding:4px 8px;border:1px solid #ccc;">${escapeHTML(key)}</td><td style="padding:4px 8px;border:1px solid #ccc;">${escapeHTML(String(val))}</td></tr>`;
+        });
+
+        win.document.write(`
+          <!DOCTYPE html>
+          <html lang="hi">
+          <head>
+            <meta charset="UTF-8" />
+            <title>CSC Receipt</title>
+          </head>
+          <body style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+            <h2>CSC सहायक रसीद / CSC Sahayak Receipt</h2>
+            <p>नागरिक का नाम: <strong>${escapeHTML(name)}</strong><br>
+            सेवा: <strong>${escapeHTML(service)}</strong><br>
+            मोबाइल: <strong>${escapeHTML(phone || "-")}</strong><br>
+            संदर्भ: <strong>${escapeHTML(refId)}</strong><br>
+            दिनांक: <strong>${escapeHTML(now)}</strong></p>
+            <hr>
+            <h3>भरे गए विवरण / Filled Details</h3>
+            <table style="border-collapse:collapse;width:100%;font-size:13px;">
+              <thead>
+                <tr>
+                  <th style="padding:4px 8px;border:1px solid #ccc;text-align:left;">Field</th>
+                  <th style="padding:4px 8px;border:1px solid #ccc;text-align:left;">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+          </body>
+          </html>
+        `);
+        win.document.close();
+        win.focus();
+        win.print();
+      });
+
       setTimeout(() => {
         const restartBtn = document.createElement("button");
         restartBtn.className = "btn btn-secondary";
@@ -1567,6 +1691,85 @@
         scrollToBottom();
       }, 500);
     });
+  }
+
+  /**
+   * Build and persist a training session, trigger model sync & SMS.
+   */
+  async function finalizeOcrSession(operatorDecision, refId = null) {
+    if (!sessionData || !sessionData.extractedData) return;
+
+    const extracted = sessionData.extractedData.extractedFields || {};
+    const confidence = {};
+    Object.keys(extracted).forEach(k => {
+      const v = extracted[k];
+      confidence[k] = typeof v.confidence === "number" ? v.confidence : 0;
+    });
+
+    const aiResult = sessionData.lastValidationResult || null;
+
+    const payload = {
+      sessionId: null,
+      timestamp: new Date().toISOString(),
+      citizenName: sessionData.name || null,
+      citizenPhone: sessionData.phone || sessionData.citizenPhone || null,
+      serviceType: sessionData.selectedService || "default",
+      extractedFields: Object.fromEntries(
+        Object.entries(extracted).map(([k, v]) => [k, v && v.value != null ? v.value : null])
+      ),
+      confidenceScores: confidence,
+      aiValidationResult: aiResult,
+      operatorDecision,
+      outcome: null
+    };
+
+    let saved = null;
+    try {
+      if (typeof SessionManager !== "undefined" && SessionManager.saveSession) {
+        saved = await SessionManager.saveSession(payload);
+        sessionData.lastSavedSessionId = saved.sessionId;
+      }
+    } catch (e) {
+      console.warn("[Panel] SessionManager.saveSession failed", e);
+    }
+
+    try {
+      if (typeof ModelSync !== "undefined" && ModelSync.enqueueSession && saved) {
+        ModelSync.enqueueSession(saved);
+      }
+    } catch (e) {
+      console.warn("[Panel] ModelSync.enqueueSession failed", e);
+    }
+
+    // Fire SMS notification if configured (optional; WhatsApp/print are primary channels now)
+    try {
+      if (typeof SMSService !== "undefined" && SMSService.sendSMS && payload.citizenPhone) {
+        let tpl = "APPLICATION_SUBMITTED";
+        if (operatorDecision === "CANCELLED_AI_WARNING" || operatorDecision === "CANCELLED_BY_OPERATOR") {
+          tpl = "APPLICATION_CANCELLED";
+        }
+        const ok = await SMSService.sendSMS(payload.citizenPhone, tpl, {
+          name: payload.citizenName || "नागरिक",
+          service: sessionData.serviceNameHindi || sessionData.serviceName || "सेवा",
+          refId: refId || (saved && saved.sessionId) || "-"
+        });
+        if (ok) {
+          addBotMessage(
+            "📱 नागरिक को SMS भेजा गया।",
+            "SMS sent to the citizen.",
+            {}
+          );
+        } else {
+          addBotMessage(
+            "⚠️ SMS सेवा कॉन्फ़िगर नहीं है या भेजने में समस्या आई। कृपया SMS सेटिंग्स जाँचें।",
+            "SMS could not be sent (API key / provider not configured). Please check SMS settings.",
+            { error: true }
+          );
+        }
+      }
+    } catch (e) {
+      console.warn("[Panel] SMS send failed", e);
+    }
   }
 
   // ─── Fallback for readFileAsBase64 without CSCUtils ────────
