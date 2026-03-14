@@ -179,12 +179,6 @@ export function SuccessPage() {
                 इतिहास देखें | History
               </Link>
             </div>
-            <button
-              className="w-full mt-3 py-3 rounded-xl text-white transition-all hover:opacity-90"
-              style={{ background: '#1C2B4A', fontSize: '14px' }}
-            >
-              🖨️ रसीद प्रिंट करें | Print Receipt
-            </button>
           </div>
         </div>
 

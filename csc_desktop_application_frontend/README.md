@@ -1,7 +1,7 @@
 
-  # Replicate Government Website
+  # CSC Sahayak Desktop
 
-  This is a code bundle for Replicate Government Website. The original project is available at https://www.figma.com/design/6ikF61dFteb6Mmwl1wMT4O/Replicate-Government-Website.
+  Desktop application for CSC operators — document upload, AI extraction, validation, and application management. Syncs with the Chrome extension for form auto-fill on government portals.
 
   ## Running the code
 

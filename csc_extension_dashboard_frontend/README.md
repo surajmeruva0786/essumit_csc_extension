@@ -1,7 +1,7 @@
 
-  # Review Attached File
+  # CSC AI Co-Pilot Monitoring Dashboard
 
-  This is a code bundle for Review Attached File. The original project is available at https://www.figma.com/design/WzUuB1rTnQfUMHKpj3nVKA/Review-Attached-File.
+  Monitoring dashboard for CSC Sahayak — operator activity, analytics, AI performance, and rejections. Part of the CSC e-Governance ecosystem.
 
   ## Running the code
 
