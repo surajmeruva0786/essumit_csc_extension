@@ -65,7 +65,7 @@ export default function ValidationResult() {
   };
 
   const handleCancel = () => {
-    navigate('/');
+    navigate('/welcome');
   };
 
   if (loading) {

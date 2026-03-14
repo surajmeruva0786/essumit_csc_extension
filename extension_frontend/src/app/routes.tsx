@@ -1,5 +1,6 @@
 import { createHashRouter } from "react-router";
 import Layout from "./components/Layout";
+import OperatorLogin from "./screens/OperatorLogin";
 import Welcome from "./screens/Welcome";
 import CitizenDetails from "./screens/CitizenDetails";
 import ServiceSelection from "./screens/ServiceSelection";
@@ -10,14 +11,15 @@ import ValidationResult from "./screens/ValidationResult";
 import SubmissionSuccess from "./screens/SubmissionSuccess";
 import AIAssistant from "./screens/AIAssistant";
 
-// Use hash-based routing so the app works correctly inside a Chrome extension,
-// where the base path is not always "/" (e.g., chrome-extension://.../extension_frontend/dist/index.html#/)
+// Use hash-based routing so the app works correctly inside a Chrome extension.
+// Operator login is the first screen (index); Welcome is the main menu after login.
 export const router = createHashRouter([
   {
     path: "/",
     Component: Layout,
     children: [
-      { index: true, Component: Welcome },
+      { index: true, Component: OperatorLogin },
+      { path: "welcome", Component: Welcome },
       { path: "citizen-details", Component: CitizenDetails },
       { path: "service-selection", Component: ServiceSelection },
       { path: "documents", Component: DocumentChecklist },

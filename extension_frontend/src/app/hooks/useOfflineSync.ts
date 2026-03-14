@@ -123,13 +123,23 @@ export function useOfflineSync() {
 
       setSyncMsg('Groq AI field matching कर रहा है...');
 
-      const compactForm = scannedFields.slice(0, 50).map((f: any) => ({
-        selector: f.selector,
-        label: f.label || f.fieldKey,
-        labelHi: f.labelHi || '',
-        type: f.type || 'text',
-        options: f.options?.slice(0, 20).map((o: any) => o.text || o.value) ?? [],
-      }));
+      const compactForm = scannedFields.slice(0, 60).map((f: any) => {
+        const entry: Record<string, unknown> = {
+          selector: f.selector,
+          fieldKey: f.fieldKey,
+          label: f.label || f.fieldKey,
+          labelHi: f.labelHi || '',
+          type: f.type || 'text',
+        };
+        if (f.options && f.options.length) {
+          entry.options = f.options.slice(0, 100).map((o: any) => ({ value: o.value ?? '', text: o.text ?? String(o.value ?? '') }));
+        }
+        if ((f.type || '').toLowerCase() === 'file') {
+          entry.accept = f.accept || null;
+          entry.multiple = !!f.multiple;
+        }
+        return entry;
+      });
 
       const compactDesktop = desktopFields
         .map((f: any) => ({
@@ -141,20 +151,22 @@ export function useOfflineSync() {
 
       const systemPrompt = `You are a precise form-filling assistant for Indian government portals.
 Your job: Given (A) form fields on a webpage and (B) extracted citizen data, produce a JSON mapping.
+
 Rules:
 - Match by MEANING, not exact text. Hindi & English labels both acceptable.
 - For date fields (type=date), ALWAYS convert to YYYY-MM-DD.
-- For select/dropdown fields, the value MUST exactly match one of the provided options (case-insensitive match is ok, but return the exact option text).
+- For SELECT/DROPDOWN fields: You MUST choose the single best-matching option from the field's "options" array. Return the exact "value" of that option (use the "value" property from the options list, not the display text). If the citizen value is "OBC", match to the option whose value or text is equivalent (e.g. "OBC", "Other Backward Class") and return that option's "value".
+- For FILE upload fields (type=file): If the citizen data or context includes a document type that matches the field label (e.g. "Aadhaar", "Photo", "Address proof"), include that field with value set to the document type identifier (e.g. "aadhaar", "photo"). The extension may later map this to an actual file.
 - Only include high-confidence matches. Skip if unsure.
 - Return ONLY a valid JSON array, NO markdown, NO explanation.`;
 
-      const userPrompt = `FORM FIELDS (on webpage):
+      const userPrompt = `FORM FIELDS (on webpage). For dropdowns, "options" lists { value, text }; you must return the exact option "value" that best matches the citizen data.
 ${JSON.stringify(compactForm, null, 2)}
 
 EXTRACTED CITIZEN DATA (from documents):
 ${JSON.stringify(compactDesktop, null, 2)}
 
-Return a JSON array of fill instructions:
+Return a JSON array of fill instructions. For dropdowns use the exact option "value" from the options array.
 [
   {"selector": "<css-selector>", "fieldKey": "<fieldKey>", "value": "<value-to-fill>"},
   ...
@@ -189,12 +201,43 @@ Return a JSON array of fill instructions:
       const fields: Record<string, string> = {};
       const selectors: Record<string, string> = {};
       const confidenceMap: Record<string, number> = {};
+      const filePayloads: Record<string, { base64: string; fileName: string; mimeType?: string }> = {};
+
+      const documentFiles = appData.document_files || appData.documentFiles || {};
 
       fillInstructions.forEach((inst: any) => {
         const key = inst.fieldKey || inst.selector;
-        fields[key] = inst.value;
-        selectors[key] = inst.selector;
-        confidenceMap[key] = 0.95;
+        const sel = inst.selector;
+        const val = inst.value;
+        const isFileField = (scannedFields as any[]).some(
+          (f: any) => (f.selector === sel || f.fieldKey === key) && (f.type || '').toLowerCase() === 'file'
+        );
+        if (isFileField && val && documentFiles[String(val).toLowerCase()]) {
+          const doc = documentFiles[String(val).toLowerCase()];
+          if (doc && typeof doc.base64 === 'string') {
+            filePayloads[sel] = {
+              base64: doc.base64,
+              fileName: doc.fileName || doc.file_name || `document_${val}.pdf`,
+              mimeType: doc.mimeType || doc.mime_type,
+            };
+          }
+        } else if (!isFileField) {
+          fields[key] = val;
+          selectors[key] = sel;
+          confidenceMap[key] = 0.95;
+        }
+      });
+
+      // Ensure every dropdown (select with options) gets a selection: add __random__ for any not already filled
+      const filledSelectors = new Set(Object.values(selectors));
+      (scannedFields as any[]).forEach((f: any) => {
+        const hasOptions = f.options && Array.isArray(f.options) && f.options.length > 0;
+        if (!hasOptions) return;
+        if (filledSelectors.has(f.selector)) return;
+        const key = f.fieldKey || f.selector;
+        fields[key] = '__random__';
+        selectors[key] = f.selector;
+        confidenceMap[key] = 0.5;
       });
 
       const fillResult = await sendToContentScript({
@@ -202,6 +245,7 @@ Return a JSON array of fill instructions:
         fields,
         selectors,
         confidenceMap,
+        filePayloads: Object.keys(filePayloads).length ? filePayloads : undefined,
       });
 
       const filled = fillResult?.filledCount ?? fillInstructions.length;

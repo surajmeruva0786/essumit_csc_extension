@@ -253,7 +253,21 @@
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "AUTO_FILL_FORM") {
-      const result = autoFillForm(message.fields, message.selectors, message.confidenceMap);
+      var fields = Object.assign({}, message.fields || {});
+      var selectors = Object.assign({}, message.selectors || {});
+      var confidenceMap = Object.assign({}, message.confidenceMap || {});
+      var filledSelectors = new Set(Object.values(selectors));
+      var scanned = scanFormFields();
+      scanned.forEach(function (f) {
+        if (!f.options || !f.options.length) return;
+        if (filledSelectors.has(f.selector)) return;
+        var key = f.fieldKey || ("dropdown_" + (f.selector || "").replace(/[^a-zA-Z0-9]/g, "_"));
+        fields[key] = "__random__";
+        selectors[key] = f.selector;
+        confidenceMap[key] = 0.5;
+        filledSelectors.add(f.selector);
+      });
+      const result = autoFillForm(fields, selectors, confidenceMap, message.filePayloads || {});
       // Give the page a moment to show its own loader, then repeatedly clear it.
       setTimeout(() => {
         patchPortalLoadingToggle();
@@ -299,8 +313,17 @@
            confidenceMap[match.fieldKey] = 0.95; // Assume high confidence for reviewed offline data
         }
       });
-      
-      const result = autoFillForm(mappedFields, mappedSelectors, confidenceMap);
+      var filledSel = new Set(Object.values(mappedSelectors));
+      liveFormFields.forEach(function (f) {
+        if (!f.options || !f.options.length) return;
+        if (filledSel.has(f.selector)) return;
+        var key = f.fieldKey || ("dropdown_" + (f.selector || "").replace(/[^a-zA-Z0-9]/g, "_"));
+        mappedFields[key] = "__random__";
+        mappedSelectors[key] = f.selector;
+        confidenceMap[key] = 0.5;
+        filledSel.add(f.selector);
+      });
+      const result = autoFillForm(mappedFields, mappedSelectors, confidenceMap, {});
       
       setTimeout(() => {
         patchPortalLoadingToggle();
@@ -355,12 +378,12 @@
       "गाँव": "village", "ग्राम": "village"
     };
 
-    const SKIP_TYPES = new Set(["hidden", "submit", "button", "reset", "file", "image", "password"]);
+    const SKIP_TYPES = new Set(["hidden", "submit", "button", "reset", "image", "password"]);
 
     const elements = document.querySelectorAll("input, select, textarea");
 
     elements.forEach((el) => {
-      // Skip unwanted types
+      // Skip unwanted types (file is included so we can extract upload fields and later fill them)
       const inputType = (el.type || "text").toLowerCase();
       if (SKIP_TYPES.has(inputType)) return;
 
@@ -423,11 +446,17 @@
         tagName: el.tagName.toLowerCase()
       };
 
-      // For select elements, include options
+      // For select elements, include all dropdown options (value + text)
       if (el.tagName === "SELECT") {
         fieldInfo.options = Array.from(el.options)
-          .slice(0, 50) // Cap at 50 options
-          .map(opt => ({ value: opt.value, text: opt.textContent.trim() }));
+          .slice(0, 100)
+          .map(opt => ({ value: (opt.value || "").trim(), text: (opt.textContent || "").trim() }));
+      }
+
+      // For file inputs, include accept and hint for matching (e.g. Aadhaar, Photo)
+      if (inputType === "file") {
+        fieldInfo.accept = (el.accept || "").trim() || null;
+        fieldInfo.multiple = !!el.multiple;
       }
 
       fields.push(fieldInfo);
@@ -543,18 +572,20 @@
    * @param {Object} fields       — { fieldName: value }
    * @param {Object} selectors    — { fieldName: "css-selector, ..." }
    * @param {Object} confidenceMap — { fieldName: confidence (0–1) }
+   * @param {Object} filePayloads — optional { "selector": { base64, fileName, mimeType } }
    * @returns {{ filledCount, totalFields, details }}
    */
-  function autoFillForm(fields, selectors, confidenceMap) {
+  function autoFillForm(fields, selectors, confidenceMap, filePayloads) {
     const details = [];
     let filledCount = 0;
-    const totalFields = Object.keys(fields).length;
+    const totalFields = Object.keys(fields).length + (filePayloads ? Object.keys(filePayloads).length : 0);
+    const filledElements = new Set();
 
-    // Inject auto-fill styles if not already injected
     injectAutoFillStyles();
 
+    // 1. Fill text/select/textarea fields from the provided list
     for (const [fieldName, value] of Object.entries(fields)) {
-      if (!value) {
+      if (value === undefined || value === null || (typeof value === "string" && !value.trim())) {
         details.push({ field: fieldName, status: "skipped", reason: "empty value" });
         continue;
       }
@@ -571,6 +602,14 @@
         continue;
       }
 
+      const tagName = element.tagName && element.tagName.toLowerCase();
+      const isFileInput = tagName === "input" && (element.type || "").toLowerCase() === "file";
+      if (isFileInput) {
+        details.push({ field: fieldName, status: "skipped", reason: "file field (use filePayloads)" });
+        continue;
+      }
+
+      filledElements.add(element);
       const confidence = confidenceMap[fieldName] || 0;
 
       try {
@@ -580,6 +619,47 @@
         details.push({ field: fieldName, status: "filled", confidence });
       } catch (e) {
         details.push({ field: fieldName, status: "error", reason: e.message });
+      }
+    }
+
+    // 2. Fill every remaining <select> on the page that wasn't filled yet (ensure all dropdowns get a selection)
+    Array.from(document.querySelectorAll("select")).forEach(function (sel) {
+      if (filledElements.has(sel)) return;
+      if (!sel.options || sel.options.length === 0) return;
+      try {
+        fillElement(sel, "__random__");
+        highlightElement(sel, 0.5);
+        filledCount++;
+        details.push({ field: "select_" + (sel.name || sel.id || "n"), status: "filled", confidence: 0.5 });
+      } catch (e) {
+        details.push({ field: "select_" + (sel.name || sel.id || "n"), status: "error", reason: (e && e.message) || "select fill failed" });
+      }
+    });
+
+    // 3. Fill file inputs from filePayloads (selector -> { base64, fileName, mimeType })
+    if (filePayloads && typeof filePayloads === "object") {
+      for (const [selectorStr, payload] of Object.entries(filePayloads)) {
+        if (!payload || !payload.base64) continue;
+        try {
+          const element = findElement(selectorStr);
+          if (!element || element.tagName.toLowerCase() !== "input" || (element.type || "").toLowerCase() !== "file") {
+            details.push({ field: selectorStr, status: "not_found", reason: "file input not found" });
+            continue;
+          }
+          const binary = atob(payload.base64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          const file = new File([bytes], payload.fileName || "document", { type: payload.mimeType || "application/octet-stream" });
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          element.files = dt.files;
+          element.dispatchEvent(new Event("input", { bubbles: true }));
+          element.dispatchEvent(new Event("change", { bubbles: true }));
+          filledCount++;
+          details.push({ field: selectorStr, status: "filled", confidence: 0.95 });
+        } catch (e) {
+          details.push({ field: selectorStr, status: "error", reason: (e && e.message) || "file fill failed" });
+        }
       }
     }
 
@@ -651,43 +731,62 @@
    * Fill a form element with a value, triggering appropriate events.
    */
   function fillElement(element, value) {
-    if (!value) return;
+    if (value === undefined || value === null) return;
     const tagName = element.tagName.toLowerCase();
     const cleanVal = String(value).trim().toLowerCase();
 
     if (tagName === "select") {
-      // Try to find matching option by value first, then text content
+      const forceRandom = cleanVal === "__random__" || cleanVal === "__dropdown_random__";
       let bestMatch = null;
-      let highestSimilarity = 0;
-      
       const valNoPunct = cleanVal.replace(/[^a-z0-9]/g, "");
 
-      for (const opt of element.options) {
-        const optVal = opt.value.toLowerCase();
-        const optText = opt.textContent.trim().toLowerCase();
+      if (!forceRandom) for (const opt of element.options) {
+        const optVal = (opt.value || "").toLowerCase();
+        const optText = (opt.textContent || "").trim().toLowerCase();
         const optTextNoPunct = optText.replace(/[^a-z0-9]/g, "");
 
-        // Exact match
         if (optVal === cleanVal || optText === cleanVal) {
           bestMatch = opt;
           break;
         }
-
-        // Without punctuation (e.g. "o.b.c." vs "obc")
-        if (optTextNoPunct === valNoPunct) {
+        if (optTextNoPunct && valNoPunct && optTextNoPunct === valNoPunct) {
           bestMatch = opt;
           break;
         }
-
-        // Partial match
-        if (optText.includes(cleanVal) || cleanVal.includes(optText)) {
+        if (optText.includes(cleanVal) || (cleanVal && optText && (cleanVal.includes(optText) || optTextNoPunct.includes(valNoPunct)))) {
           bestMatch = opt;
         }
       }
 
       if (bestMatch) {
-         element.value = bestMatch.value;
+        element.value = bestMatch.value;
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        // No similarity detected (or __random__ requested): choose a random valid option (skip placeholders like "चुनिये" / "Choose")
+        var placeholderTexts = /^(चुनिये|choose|select|please select|कृपया चुनें|--|\-\s*)$/i;
+        var validOptions = Array.from(element.options).filter(function (opt) {
+          var v = (opt.value || "").trim();
+          var t = (opt.textContent || "").trim();
+          if (v.length === 0 && placeholderTexts.test(t)) return false;
+          return v.length > 0 || t.length > 0;
+        });
+        if (validOptions.length > 0) {
+          var randomIndex = Math.floor(Math.random() * validOptions.length);
+          var chosen = validOptions[randomIndex];
+          var setVal = chosen.value || (chosen.textContent || "").trim();
+          element.value = setVal;
+          if (element.value !== setVal && chosen.index >= 0) element.selectedIndex = chosen.index;
+        } else if (element.options.length > 1) {
+          var firstReal = element.options[1];
+          if (firstReal) {
+            element.value = firstReal.value || (firstReal.textContent || "").trim();
+            if (element.selectedIndex !== 1) element.selectedIndex = 1;
+          }
+        }
       }
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
 
     } else if (tagName === "textarea") {
       element.value = value;

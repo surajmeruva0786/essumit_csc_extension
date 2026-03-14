@@ -2,13 +2,16 @@
 
 export interface ScannedField {
   fieldKey: string;
-  semanticKey: string; // for backend extraction - always semantic, never numeric
+  semanticKey: string;
   label: string;
   labelHi: string;
   selector: string;
   type: string;
   tagName: string;
   options?: Array<{ value: string; text: string }>;
+  /** For type=file: accepted MIME types or extensions */
+  accept?: string | null;
+  multiple?: boolean;
 }
 
 /**
@@ -68,7 +71,7 @@ function scanFormInPage(): ScannedField[] {
   'सेवा प्रकार': 'serviceType',
   };
 
-  const SKIP_TYPES = new Set(['hidden', 'submit', 'button', 'reset', 'file', 'image', 'password']);
+  const SKIP_TYPES = new Set(['hidden', 'submit', 'button', 'reset', 'image', 'password']);
 
   function toCamelCase(str: string): string {
     if (!str || typeof str !== 'string') return '';
@@ -178,8 +181,12 @@ function scanFormInPage(): ScannedField[] {
     if (el.tagName === 'SELECT') {
       const sel = el as HTMLSelectElement;
       info.options = Array.from(sel.options || [])
-        .slice(0, 50)
-        .map((o) => ({ value: o.value || '', text: (o.textContent || '').trim() }));
+        .slice(0, 100)
+        .map((o) => ({ value: (o.value || '').trim(), text: (o.textContent || '').trim() }));
+    }
+    if ((info.type || '').toLowerCase() === 'file') {
+      info.accept = (inp.accept || '').trim() || undefined;
+      info.multiple = !!inp.multiple;
     }
     fields.push(info);
   });

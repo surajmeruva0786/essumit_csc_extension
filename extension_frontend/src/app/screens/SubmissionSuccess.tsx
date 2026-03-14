@@ -36,12 +36,13 @@ export default function SubmissionSuccess() {
       operatorDecision: 'SUBMITTED',
     })
       .then((s) => {
-        setRefId(s.refId);
+        if (s?.refId) setRefId(s.refId);
         setSaved(true);
       })
       .catch((e) => {
         console.warn('[SubmissionSuccess] Session save failed', e);
         setRefId('REF-CG-' + new Date().getFullYear() + '-' + Math.random().toString(36).slice(2, 7).toUpperCase());
+        setSaved(true);
       });
   }, [extraction, serviceId, name, mobile, validation, saved]);
 
@@ -186,7 +187,7 @@ export default function SubmissionSuccess() {
 
         <div className="space-y-2.5">
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/welcome')}
             className="w-full h-11 rounded-md bg-saffron hover:bg-saffron-hover text-white font-medium text-sm flex items-center justify-between px-4 transition-colors"
           >
             <div className="flex items-center gap-2">
@@ -197,7 +198,7 @@ export default function SubmissionSuccess() {
           </button>
 
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/welcome')}
             className="w-full h-9 text-saffron font-medium text-sm hover:underline"
           >
             इतिहास देखें / View History

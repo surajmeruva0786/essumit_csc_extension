@@ -115,7 +115,7 @@ export default function AIAssistant() {
       {/* Custom Header */}
       <div className="h-14 bg-navy flex items-center justify-between px-4 flex-shrink-0">
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/welcome')}
           className="flex items-center gap-2 text-white hover:text-saffron transition-colors"
         >
           <ArrowLeft className="w-4 h-4" strokeWidth={2} />

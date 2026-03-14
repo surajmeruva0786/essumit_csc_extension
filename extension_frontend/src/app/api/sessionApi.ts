@@ -43,7 +43,7 @@ export interface SavedSession {
   outcome?: string | null;
 }
 
-export async function saveSession(payload: SessionPayload): Promise<SavedSession> {
+export function saveSession(payload: SessionPayload): Promise<SavedSession> {
   const sessionId = payload.sessionId || generateSessionId();
   const refId = generateRefId(payload.serviceType || '');
   const enriched: SavedSession = {
@@ -60,27 +60,28 @@ export async function saveSession(payload: SessionPayload): Promise<SavedSession
     outcome: payload.outcome ?? null,
   };
 
-  const persistAndResolve = () => {
-    // Save to Firebase Firestore (non-blocking)
-    saveSessionToFirebase(enriched).catch((e) =>
-      console.warn('[sessionApi] Firebase save failed', e)
-    );
-    resolve(enriched);
-  };
+  return new Promise((resolve, reject) => {
+    const persistAndResolve = () => {
+      saveSessionToFirebase(enriched).catch((e) =>
+        console.warn('[sessionApi] Firebase save failed', e)
+      );
+      resolve(enriched);
+    };
 
-  if (typeof chrome === 'undefined' || !chrome.storage?.local) {
-    persistAndResolve();
-    return;
-  }
-  chrome.storage.local.get([STORAGE_KEY, OPERATOR_ID_KEY], (items: Record<string, unknown>) => {
-    const sessions = Array.isArray(items[STORAGE_KEY]) ? (items[STORAGE_KEY] as SavedSession[]) : [];
-    sessions.push(enriched);
-    if (sessions.length > MAX_SESSIONS) {
-      sessions.splice(0, sessions.length - MAX_SESSIONS);
+    if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+      persistAndResolve();
+      return;
     }
-    chrome.storage.local.set({ [STORAGE_KEY]: sessions }, () => {
-      if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
-      else persistAndResolve();
+    chrome.storage.local.get([STORAGE_KEY, OPERATOR_ID_KEY], (items: Record<string, unknown>) => {
+      const sessions = Array.isArray(items[STORAGE_KEY]) ? (items[STORAGE_KEY] as SavedSession[]) : [];
+      sessions.push(enriched);
+      if (sessions.length > MAX_SESSIONS) {
+        sessions.splice(0, sessions.length - MAX_SESSIONS);
+      }
+      chrome.storage.local.set({ [STORAGE_KEY]: sessions }, () => {
+        if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+        else persistAndResolve();
+      });
     });
   });
 }

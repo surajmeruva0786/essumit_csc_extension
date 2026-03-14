@@ -94,7 +94,7 @@ export default function CitizenDetails() {
       </div>
 
       <NavigationButtons
-        onBack={() => navigate('/')}
+        onBack={() => navigate('/welcome')}
         onNext={handleNext}
         nextDisabled={!name || !mobile || mobile.length !== 10}
       />

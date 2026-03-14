@@ -6,7 +6,7 @@ import AIAssistantPopup from './AIAssistantPopup';
 
 export default function Layout() {
   const location = useLocation();
-  const isWelcome = location.pathname === '/';
+  const isWelcome = location.pathname === '/' || location.pathname === '/welcome';
   const isAIAssistant = location.pathname === '/ai-assistant';
   const [isAIPopupOpen, setIsAIPopupOpen] = useState(false);
 
