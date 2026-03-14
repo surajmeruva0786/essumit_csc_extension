@@ -5,7 +5,7 @@ const AIAssistant = (() => {
   "use strict";
 
   const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-  const DEFAULT_GROQ_API_KEY = "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";
+  const DEFAULT_GROQ_API_KEY = "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";
   // Use only currently supported Groq chat models. Avoid deprecated llama3-* models.
   const GROQ_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"];
 
