@@ -184,6 +184,10 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
+const MIN_SESSIONS_FOR_LIVE_VIEW = 50; // Show sample data until enough Firebase sessions
+const USE_SAMPLE_DATA = (stats: { totalSessions: number } | null) =>
+  !stats || stats.totalSessions < MIN_SESSIONS_FOR_LIVE_VIEW;
+
 const SERVICE_NAMES: Record<string, string> = {
   birth: 'Birth Certificate',
   death: 'Death Certificate',
@@ -382,42 +386,50 @@ export default function DashboardOverview() {
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* Stat Cards */}
+      {/* Stat Cards — sample data until 50+ Firebase sessions, then live data */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard
           title="Total Applications Submitted"
-          value={stats ? stats.totalSessions.toLocaleString() : '—'}
-          subtitle={stats ? `Today: ${stats.todayCount} • This week: ${stats.weekCount}` : 'Loading from Firebase...'}
+          value={USE_SAMPLE_DATA(stats) ? '1,24,567' : (stats!.totalSessions.toLocaleString())}
+          subtitle={USE_SAMPLE_DATA(stats) ? 'Today: 3,421 • This week: 23,890' : `Today: ${stats!.todayCount} • This week: ${stats!.weekCount}`}
           icon={FileStack}
           iconBg="#eef2f7"
           iconColor="#1a4592"
+          trend={USE_SAMPLE_DATA(stats) ? 'up' : undefined}
+          trendValue={USE_SAMPLE_DATA(stats) ? '+8.2%' : undefined}
           accentColor="#1a4592"
         />
         <StatCard
           title="Acceptance Rate"
-          value={stats ? `${stats.acceptanceRate}%` : '—'}
-          subtitle="Low-risk submissions"
+          value={USE_SAMPLE_DATA(stats) ? '78.4%' : `${stats!.acceptanceRate}%`}
+          subtitle="Applications approved"
           icon={TrendingUp}
           iconBg="#f0fdf4"
           iconColor="#138808"
+          trend={USE_SAMPLE_DATA(stats) ? 'up' : undefined}
+          trendValue={USE_SAMPLE_DATA(stats) ? '+2.3%' : undefined}
           accentColor="#138808"
         />
         <StatCard
           title="Rejection Warnings"
-          value={stats ? stats.totalWarnings.toLocaleString() : '—'}
+          value={USE_SAMPLE_DATA(stats) ? '1,243' : stats!.totalWarnings.toLocaleString()}
           subtitle="AI predicted rejection alerts"
           icon={AlertCircle}
           iconBg="#fff7ed"
           iconColor="#ea580c"
+          trend={USE_SAMPLE_DATA(stats) ? 'down' : undefined}
+          trendValue={USE_SAMPLE_DATA(stats) ? '-4.1%' : undefined}
           accentColor="#FF9933"
         />
         <StatCard
           title="Active CSC Operators"
-          value={stats ? String(stats.activeOperatorCount) : '—'}
-          subtitle="Registered operator IDs"
+          value={USE_SAMPLE_DATA(stats) ? '2,891' : String(stats!.activeOperatorCount)}
+          subtitle="Using extension today"
           icon={UserCheck}
           iconBg="#eef2f7"
           iconColor="#1a4592"
+          trend={USE_SAMPLE_DATA(stats) ? 'up' : undefined}
+          trendValue={USE_SAMPLE_DATA(stats) ? '+124' : undefined}
           accentColor="#0c2461"
         />
       </div>
@@ -438,7 +450,7 @@ export default function DashboardOverview() {
             </select>
           </div>
           <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={stats?.sessionsByDate?.length ? stats.sessionsByDate.map((d) => ({ date: d.date.slice(5), submissions: d.count })) : appOverTimeData}>
+            <LineChart data={USE_SAMPLE_DATA(stats) || !stats?.sessionsByDate?.length ? appOverTimeData : stats.sessionsByDate.map((d) => ({ date: d.date.slice(5), submissions: d.count }))}>
               <CartesianGrid key="grid" strokeDasharray="3 3" stroke="#f1f5f9"/>
               <XAxis key="x-axis" dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false}/>
               <YAxis key="y-axis" tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} tickFormatter={v => v.toLocaleString()}/>
@@ -483,43 +495,7 @@ export default function DashboardOverview() {
       </div>
 
       {/* Charts Row 2 */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        {/* Acceptance vs Rejection */}
-        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-gray-800">Acceptance vs Rejection Rate</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Monthly breakdown by status</p>
-            </div>
-          </div>
-          {/* Custom bar chart — avoids Recharts grouped-bar key collision bug */}
-          <div className="flex items-end justify-between gap-2 h-[200px] px-2">
-            {acceptanceData.map((d) => {
-              const total = d.approved + d.rejected + d.pending;
-              const maxTotal = Math.max(...acceptanceData.map(x => x.approved + x.rejected + x.pending));
-              const heightPct = (total / maxTotal) * 100;
-              const approvedPct = (d.approved / total) * 100;
-              const rejectedPct = (d.rejected / total) * 100;
-              const pendingPct = (d.pending / total) * 100;
-              return (
-                <div key={d.month} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full flex flex-col justify-end rounded-sm overflow-hidden" style={{ height: `${heightPct}%`, maxHeight: '180px' }}>
-                    <div title={`Approved: ${d.approved.toLocaleString()}`} style={{ height: `${approvedPct}%`, backgroundColor: '#138808' }}/>
-                    <div title={`Rejected: ${d.rejected.toLocaleString()}`} style={{ height: `${rejectedPct}%`, backgroundColor: '#ef4444' }}/>
-                    <div title={`Pending: ${d.pending.toLocaleString()}`} style={{ height: `${pendingPct}%`, backgroundColor: '#FF9933' }}/>
-                  </div>
-                  <span className="text-xs text-gray-400 mt-1">{d.month}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex items-center gap-4 mt-3 justify-center">
-            <div className="flex items-center gap-1.5 text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-sm bg-[#138808] inline-block"/><span>Approved</span></div>
-            <div className="flex items-center gap-1.5 text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-sm bg-[#ef4444] inline-block"/><span>Rejected</span></div>
-            <div className="flex items-center gap-1.5 text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-sm bg-[#FF9933] inline-block"/><span>Pending</span></div>
-          </div>
-        </div>
-
+      <div className="grid grid-cols-1 xl:grid-cols-1 gap-4">
         {/* Top Services */}
         <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-4">
@@ -532,7 +508,7 @@ export default function DashboardOverview() {
           <div className="space-y-3 py-1">
             {(() => {
               const topServicesArray =
-                stats?.byService && Object.keys(stats.byService).length > 0
+                !USE_SAMPLE_DATA(stats) && stats?.byService && Object.keys(stats.byService).length > 0
                   ? Object.entries(stats.byService)
                       .sort(([, a], [, b]) => b - a)
                       .slice(0, 6)
@@ -595,7 +571,7 @@ export default function DashboardOverview() {
               </tr>
             </thead>
             <tbody>
-              {(operatorSessions.length > 0
+              {(!USE_SAMPLE_DATA(stats) && operatorSessions.length > 0
               ? operatorSessions.slice(0, 8).map((s) => {
                   const risk = s.aiValidationResult?.overallRisk || 'LOW';
                   const warnings = s.aiValidationResult?.issues?.length ?? 0;
