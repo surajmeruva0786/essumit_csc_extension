@@ -20,7 +20,6 @@ import pytesseract
 from pytesseract import Output
 from PIL import Image
 import io
-import google.generativeai as genai
 from typing import List, Dict, Any
 from dotenv import load_dotenv
 
@@ -65,13 +64,11 @@ else:
     pytesseract.pytesseract.tesseract_cmd = 'tesseract'
     print("✓ Using system Tesseract (Linux)")
 
-# Configure Gemini API
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
-    print("❌ Error: GEMINI_API_KEY not found in .env file")
+# Configure Groq API
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+if not GROQ_API_KEY:
+    print("❌ Error: GROQ_API_KEY not found in .env file")
     sys.exit(1)
-
-genai.configure(api_key=GEMINI_API_KEY)
 
 # ============================================================
 # 🔹 PATENT-ELIGIBLE OCR PIPELINE

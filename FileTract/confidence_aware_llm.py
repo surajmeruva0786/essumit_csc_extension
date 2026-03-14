@@ -5,8 +5,10 @@ Part of Patent-Eligible OCR Pipeline
 Constructs confidence-aware prompts and extracts fields with quality metadata.
 """
 
+import os
 import json
-import google.generativeai as genai
+import groq
+import httpx
 from typing import List, Dict, Any
 from dataclasses import dataclass
 
@@ -29,14 +31,22 @@ class ConfidenceAwareLLM:
     Patent-eligible component: Confidence injection into LLM prompts.
     """
     
-    def __init__(self, model_name: str = 'gemini-2.5-flash'):
+    def __init__(self, model_name: str = 'llama-3.3-70b-versatile'):
         """
         Initialize confidence-aware LLM extractor.
         
         Args:
-            model_name: Gemini model to use
+            model_name: Groq model to use
         """
-        self.model = genai.GenerativeModel(model_name)
+        # Configure Groq API
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise ValueError("GROQ_API_KEY not found in environment variables")
+
+        # Pass httpx client explicitly to avoid proxy bug (Client.__init__() proxies argument)
+        http_client = httpx.Client()
+        self.client = groq.Groq(api_key=api_key, http_client=http_client)
+        self.model_name = model_name
         self.low_confidence_threshold = 0.75
         self.medium_confidence_threshold = 0.85
     
@@ -120,12 +130,21 @@ Now extract the fields and return the JSON:"""
         prompt = self.build_confidence_prompt(fused_regions, fields, annotated_text)
         
         try:
-            # Call Gemini API
-            print("  🤖 Sending confidence-aware request to Gemini API...")
-            response = self.model.generate_content(prompt)
+            # Call Groq API
+            print("  🤖 Sending confidence-aware request to Groq API...")
+            
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": "You are an expert at extracting structured data from OCR text with quality awareness. Return ONLY valid JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.1,
+                response_format={"type": "json_object"}
+            )
             
             # Parse response
-            response_text = response.text.strip()
+            response_text = response.choices[0].message.content.strip()
             
             # Remove markdown code blocks if present
             if response_text.startswith("```json"):
@@ -137,15 +156,41 @@ Now extract the fields and return the JSON:"""
                 response_text = response_text[:-3]
             
             response_text = response_text.strip()
-            
-            # Parse JSON
+
             llm_output = json.loads(response_text)
-            
+            if not isinstance(llm_output, dict):
+                llm_output = {}
+
+            # Create a normalized map of the LLM outputs for fuzzy matching
+            normalized_output = {}
+            for k, v in llm_output.items():
+                norm_key = ''.join(c.lower() for c in k if c.isalnum())
+                normalized_output[norm_key] = v
+
             # Convert to FieldWithQuality objects
             result = {}
             for field_name in fields:
+                norm_field = ''.join(c.lower() for c in field_name if c.isalnum())
+                field_data = None
+                
+                # 1. Try exact match
                 if field_name in llm_output:
                     field_data = llm_output[field_name]
+                # 2. Try normalized match (ignores symbols/casing like 'Name*' vs 'name')
+                elif norm_field in normalized_output:
+                    field_data = normalized_output[norm_field]
+                # 3. Try partial substring match
+                else:
+                    for k, v in llm_output.items():
+                        k_norm = ''.join(c.lower() for c in k if c.isalnum())
+                        if (len(k_norm) > 3 and k_norm in norm_field) or (len(norm_field) > 3 and norm_field in k_norm):
+                            field_data = v
+                            break
+                            
+                if field_data is not None:
+                    # Ensure it's a dict (sometimes the LLM might flatten it if not careful)
+                    if not isinstance(field_data, dict):
+                        field_data = {"value": str(field_data) if field_data is not None else None, "llm_confidence": "medium", "notes": "Format coerced"}
                     
                     # Find OCR confidence for this field value
                     ocr_conf = self._find_ocr_confidence(
@@ -181,7 +226,7 @@ Now extract the fields and return the JSON:"""
             print(f"  Response: {response_text[:200]}...")
             return {field: FieldWithQuality(None, 0.0, 'low', 'error') for field in fields}
         except Exception as e:
-            print(f"  ❌ Error calling Gemini API: {e}")
+            print(f"  ❌ Error calling Groq API: {e}")
             return {field: FieldWithQuality(None, 0.0, 'low', 'error') for field in fields}
     
     def _find_ocr_confidence(self, value: str, fused_regions: List[FusedRegion]) -> float:

@@ -5,7 +5,8 @@ import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
 import io
-import google.generativeai as genai
+import groq
+import httpx
 from typing import List, Dict, Any
 from dotenv import load_dotenv
 
@@ -43,14 +44,16 @@ else:
     pytesseract.pytesseract.tesseract_cmd = 'tesseract'
     print("✓ Using system Tesseract (Linux)")
 
-# Configure Gemini API - load from environment variable
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
-    print("❌ Error: GEMINI_API_KEY not found in .env file")
+# Configure Groq API
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+if not GROQ_API_KEY:
+    print("❌ Error: GROQ_API_KEY not found in .env file")
     print("Please create a .env file with your API key (see .env.example)")
     sys.exit(1)
 
-genai.configure(api_key=GEMINI_API_KEY)
+# Pass httpx client explicitly to avoid proxy bug in some Python environments
+http_client = httpx.Client()
+client = groq.Groq(api_key=GROQ_API_KEY, http_client=http_client)
 
 # ============================================================
 # 🔹 OCR EXTRACTION FUNCTIONS
@@ -108,15 +111,12 @@ def extract_text_from_file(file_path: str) -> str:
 
 
 # ============================================================
-# 🔹 GEMINI API INTEGRATION
+# 🔹 GROQ API INTEGRATION
 # ============================================================
 
-def extract_fields_with_gemini(extracted_text: str, fields: List[str]) -> Dict[str, Any]:
-    """Use Gemini API to extract specified fields from OCR text"""
+def extract_fields_with_groq(extracted_text: str, fields: List[str]) -> Dict[str, Any]:
+    """Use Groq API to extract specified fields from OCR text"""
     try:
-        # Create the model - using gemini-2.5-flash (confirmed available)
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        
         # Construct the prompt with anti-hallucination instructions
         fields_list = ", ".join(fields)
         
@@ -125,14 +125,9 @@ def extract_fields_with_gemini(extracted_text: str, fields: List[str]) -> Dict[s
             print("  ⚠️ Warning: OCR text is empty or very short - returning null values")
             return {field: None for field in fields}
         
-        prompt = f"""You are a precise data extraction assistant. Your job is to extract ONLY the information that is EXPLICITLY present in the OCR text below.
+        system_prompt = f"""You are a precise data extraction assistant. Your job is to extract ONLY the information that is EXPLICITLY present in the OCR text below.
 
-OCR TEXT:
----
-{extracted_text}
----
-
-TASK: Extract these fields from the text above:
+TASK: Extract these fields from the text provided by the user:
 {fields_list}
 
 CRITICAL RULES:
@@ -151,22 +146,25 @@ CORRECT EXAMPLE (when data is missing):
 {{"Name": null, "School": null}}
 
 WRONG - DO NOT DO THIS:
-{{"Name": "John Doe", "School": "ABC High School"}}  ← NEVER use fake placeholder data
-
-Now extract the fields and return ONLY the JSON:"""
+{{"Name": "John Doe", "School": "ABC High School"}}  ← NEVER use fake placeholder data"""
         
         
         # Generate response
-        print("  🤖 Sending request to Gemini API...")
-        response = model.generate_content(prompt)
-        
-        # Debug: Print raw response
-        print(f"  📥 Gemini API Response received (length: {len(response.text)} chars)")
+        print("  🤖 Sending request to Groq API...")
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"OCR TEXT:\n---\n{extracted_text}\n---\n\nNow extract the fields and return ONLY the JSON:"}
+            ],
+            temperature=0.1,
+            response_format={"type": "json_object"}
+        )
         
         # Parse JSON response
-        response_text = response.text.strip()
+        response_text = response.choices[0].message.content.strip()
         
-        # Remove markdown code blocks if present
+        # Remove markdown code blocks if present (Groq usually obeys json_object, but just in case)
         if response_text.startswith("```json"):
             response_text = response_text[7:]
         elif response_text.startswith("```"):
@@ -181,16 +179,44 @@ Now extract the fields and return ONLY the JSON:"""
         print(f"  📝 Cleaned response: {response_text[:200]}...")
         
         # Parse JSON
-        extracted_data = json.loads(response_text)
-        print(f"  ✅ Successfully parsed {len(extracted_data)} fields")
+        llm_output = json.loads(response_text)
+        
+        # Create a normalized map for fuzzy matching
+        normalized_output = {}
+        for k, v in llm_output.items():
+            norm_key = ''.join(c.lower() for c in k if c.isalnum())
+            normalized_output[norm_key] = v
+            
+        # Map back to exact fields requested
+        extracted_data = {}
+        for field_name in fields:
+            norm_field = ''.join(c.lower() for c in field_name if c.isalnum())
+            
+            # 1. Exact match
+            if field_name in llm_output:
+                extracted_data[field_name] = llm_output[field_name]
+            # 2. Normalized match
+            elif norm_field in normalized_output:
+                extracted_data[field_name] = normalized_output[norm_field]
+            # 3. Fuzzy partial match
+            else:
+                match_val = None
+                for k, v in llm_output.items():
+                    k_norm = ''.join(c.lower() for c in k if c.isalnum())
+                    if (len(k_norm) > 3 and k_norm in norm_field) or (len(norm_field) > 3 and norm_field in k_norm):
+                        match_val = v
+                        break
+                extracted_data[field_name] = match_val
+                
+        print(f"  ✅ Successfully parsed {len(extracted_data)} fields (mapped from {len(llm_output)} raw keys)")
         return extracted_data
         
     except json.JSONDecodeError as e:
-        print(f"  ⚠ Error parsing Gemini response as JSON: {e}")
+        print(f"  ⚠ Error parsing Groq response as JSON: {e}")
         print(f"  📄 Response text: {response_text[:500]}")
         return {field: None for field in fields}
     except Exception as e:
-        print(f"  ❌ Error calling Gemini API: {e}")
+        print(f"  ❌ Error calling Groq API: {e}")
         import traceback
         traceback.print_exc()
         return {field: None for field in fields}
@@ -373,15 +399,15 @@ def main():
     
     print(f"\n✅ Will extract {len(fields)} field(s): {', '.join(fields)}")
     
-    # Step 4: Extract fields using Gemini API
+    # Step 4: Extract fields using Groq API
     print(f"\n{'=' * 80}")
-    print("🤖 EXTRACTING FIELDS USING GEMINI AI")
+    print("🤖 EXTRACTING FIELDS USING GROQ AI")
     print(f"{'=' * 80}")
     
     for file_path, text in extracted_texts.items():
         print(f"\n📄 Processing: {os.path.basename(file_path)}")
         
-        fields_data = extract_fields_with_gemini(text, fields)
+        fields_data = extract_fields_with_groq(text, fields)
         display_extracted_fields(os.path.basename(file_path), fields_data)
         save_extracted_fields(file_path, fields_data)
     

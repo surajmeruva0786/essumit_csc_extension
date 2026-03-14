@@ -16,7 +16,7 @@ from typing import Dict, List
 
 # Import patent pipeline modules
 from patent_ocr_pipeline import process_document_with_patent_pipeline, extract_text_with_confidence_pipeline
-from gemini_ocr_extract import extract_text_from_pdf, extract_text_from_image, extract_fields_with_gemini
+from gemini_ocr_extract import extract_text_from_pdf, extract_text_from_image, extract_fields_with_groq
 
 app = Flask(__name__, static_folder='filetract_web', static_url_path='')
 CORS(app)
@@ -73,13 +73,13 @@ def process_job_async(job_id: str, file_path: str, fields: List[str], pipeline: 
                 print(f"Falling back to standard pipeline for job {job_id}")
                 ext = os.path.splitext(file_path)[1].lower()
                 if ext == '.pdf':
-                    from gemini_ocr_extract import extract_text_from_pdf, extract_fields_with_gemini
+                    from gemini_ocr_extract import extract_text_from_pdf, extract_fields_with_groq
                     text = extract_text_from_pdf(file_path)
                 else:
-                    from gemini_ocr_extract import extract_text_from_image, extract_fields_with_gemini
+                    from gemini_ocr_extract import extract_text_from_image, extract_fields_with_groq
                     text = extract_text_from_image(file_path)
                 
-                extracted_data = extract_fields_with_gemini(text, fields)
+                extracted_data = extract_fields_with_groq(text, fields)
                 jobs[job_id]['status'] = 'complete'
                 jobs[job_id]['current_stage'] = 2
                 jobs[job_id]['results'] = extracted_data
@@ -133,7 +133,7 @@ def process_job_async(job_id: str, file_path: str, fields: List[str], pipeline: 
             jobs[job_id]['current_stage'] = 2
             
             # Extract fields
-            extracted_data = extract_fields_with_gemini(text, fields)
+            extracted_data = extract_fields_with_groq(text, fields)
             
             # Save results
             result_path = os.path.join(RESULTS_FOLDER, f"{job_id}_results.json")

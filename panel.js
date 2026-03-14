@@ -903,8 +903,8 @@
     widgetHTML += `
         </div>
         <div class="extraction-footer">
-          <button class="btn btn-primary checklist-continue-btn" id="btnAutofill">
-            ✨ फॉर्म भरें / Auto-Fill Form
+          <button class="btn btn-primary checklist-continue-btn" id="btnValidate">
+            🤖 सत्यापित करें / Validate Application
           </button>
         </div>
       </div>
@@ -912,10 +912,10 @@
 
     addBotWidget(widgetHTML);
 
-    // Attach autofill listener
-    const btnAutofill = document.getElementById("btnAutofill");
-    if (btnAutofill) {
-      btnAutofill.addEventListener("click", () => executeAutoFill(config));
+    // Attach validation listener
+    const btnValidate = document.getElementById("btnValidate");
+    if (btnValidate) {
+      btnValidate.addEventListener("click", () => runValidationAndShowDecision(config));
     }
     
     // Listen for manual edits to update session data
@@ -955,11 +955,156 @@
     return GOV_DOMAINS_PANEL.some(d => lower.includes(d));
   }
 
-  function executeAutoFill(config) {
-    const btnAutofill = document.getElementById("btnAutofill");
-    if (btnAutofill) {
-      btnAutofill.disabled = true;
-      btnAutofill.innerHTML = '<span class="loader-spinner" style="width:16px;height:16px;border-width:2px;margin-right:8px;"></span> भर रहा है...';
+  // ═══════════════════════════════════════════════════════════
+  //  STEP 5 — AI VALIDATION ASSISTANT
+  // ═══════════════════════════════════════════════════════════
+
+  async function runValidationAndShowDecision(config) {
+    const btnValidate = document.getElementById("btnValidate");
+    if (btnValidate) {
+      btnValidate.disabled = true;
+      btnValidate.innerHTML = '<span class="loader-spinner" style="width:16px;height:16px;border-width:2px;margin-right:8px;"></span> AI सत्यापित कर रहा है...';
+    }
+
+    // Capture latest manual edits into a clean flat object
+    const finalFields = {};
+    Object.keys(sessionData.extractedData.extractedFields).forEach(key => {
+      const fieldData = sessionData.extractedData.extractedFields[key];
+      const inputEl = document.getElementById(`field_${key}`);
+      if (inputEl) {
+        fieldData.value = inputEl.value; // sync session data
+      }
+      finalFields[key] = fieldData.value;
+    });
+
+    try {
+      // Call AIAssistant using Groq or Fallback
+      const result = await AIAssistant.validateApplication(
+        sessionData.selectedService || config.serviceId || "default",
+        finalFields
+      );
+
+      renderValidationUI(result, config);
+    } catch (e) {
+      console.error("Validation error:", e);
+      // Failsafe: proceed to autofill directly if AI totally crashes
+      executeAutoFill(config);
+    }
+  }
+
+  function renderValidationUI(result, config) {
+    // Determine risk badge styling
+    let riskBadgeClass = "risk-badge-low";
+    let riskText = "🟢 LOW RISK / कोई जोखिम नहीं";
+    
+    if (result.overallRisk === "HIGH") {
+      riskBadgeClass = "risk-badge-high";
+      riskText = "🔴 HIGH RISK / अस्वीकृति का जोखिम";
+    } else if (result.overallRisk === "MEDIUM") {
+      riskBadgeClass = "risk-badge-medium";
+      riskText = "🟡 MEDIUM RISK / मध्यम जोखिम";
+    }
+
+    // Build Issues List HTML
+    let issuesHtml = "";
+    if (result.issues && result.issues.length > 0) {
+      issuesHtml = `<div class="validation-issues-list">`;
+      result.issues.forEach(issue => {
+        let icon = "ℹ️";
+        let sevClass = "severity-info";
+        if (issue.severity === "CRITICAL") { icon = "🛑"; sevClass = "severity-critical"; }
+        else if (issue.severity === "WARNING") { icon = "⚠️"; sevClass = "severity-warning"; }
+
+        issuesHtml += `
+          <div class="issue-item ${sevClass}">
+            <div class="issue-icon">${icon}</div>
+            <div class="issue-content">
+              <span class="issue-field">Field: ${escapeHTML(issue.field)}</span>
+              <span class="issue-text">${escapeHTML(issue.messageHindi)}<br>${escapeHTML(issue.message)}</span>
+              ${issue.suggestion ? `<span class="issue-suggestion">💡 Suggestion: ${escapeHTML(issue.suggestion)}</span>` : ''}
+            </div>
+          </div>
+        `;
+      });
+      issuesHtml += `</div>`;
+    } else {
+      issuesHtml = `<div class="issue-item severity-info"><div class="issue-icon">✅</div><div class="issue-content"><span class="issue-text">No issues detected. All rules passed.</span></div></div>`;
+    }
+
+    // Action buttons
+    let actionButtonsHtml = "";
+    if (result.overallRisk === "HIGH" || result.eligibilityVerdict === "LIKELY_REJECTED") {
+      actionButtonsHtml = `
+        <button class="btn btn-danger" style="flex:1" id="btnCancelApp">🚫 रद्द करें / Cancel</button>
+        <button class="btn btn-secondary" style="flex:1" id="btnSubmitAnyway">⚠️ फिर भी भरें / Fill Anyway</button>
+      `;
+    } else {
+      actionButtonsHtml = `
+        <button class="btn btn-primary w-100" id="btnSubmitForm">✨ फॉर्म ऑटो-फ़िल करें / Auto-Fill Form</button>
+      `;
+    }
+
+    // Header badge indicating if it was offline
+    const modeBadge = result.isOfflineFallback ? "<span style='font-size:10px;background:rgba(255,255,255,0.2);padding:2px 6px;border-radius:6px;margin-left:8px;'>Offline Rules Engine</span>" : "<span style='font-size:10px;background:rgba(255,255,255,0.2);padding:2px 6px;border-radius:6px;margin-left:8px;'>AI Powered</span>";
+
+    const uiHtml = `
+      <div class="validation-card" style="margin-top: 10px;">
+        <div class="validation-header">
+          <span>🤖 AI सत्यापन / AI Validation ${modeBadge}</span>
+          <span class="risk-badge ${riskBadgeClass}">${riskText}</span>
+        </div>
+        <div class="validation-body">
+          <div class="validation-summary">
+            <strong>सार / Summary:</strong><br>
+            ${escapeHTML(result.summaryHindi)}<br>
+            <span style="font-size:0.9em;color:var(--text-secondary)">${escapeHTML(result.summaryEnglish)}</span>
+          </div>
+          ${issuesHtml}
+        </div>
+        <div class="validation-actions">
+          ${actionButtonsHtml}
+        </div>
+      </div>
+    `;
+
+    addBotWidget(uiHtml);
+
+    // Wire up the new buttons to the autofill flow or cancellation
+    const btnCancelApp = document.getElementById("btnCancelApp");
+    const btnSubmitAnyway = document.getElementById("btnSubmitAnyway");
+    const btnSubmitForm = document.getElementById("btnSubmitForm");
+
+    if (btnCancelApp) {
+      btnCancelApp.addEventListener("click", () => {
+        btnCancelApp.disabled = true;
+        if(btnSubmitAnyway) btnSubmitAnyway.disabled = true;
+        addBotMessage("🚫 आवेदन रद्द कर दिया गया है।", "Application cancelled due to high rejection risk.", { error: true });
+        // Can trigger SMS integration here later
+      });
+    }
+
+    if (btnSubmitAnyway) {
+      btnSubmitAnyway.addEventListener("click", () => {
+        executeAutoFill(config, "btnSubmitAnyway");
+      });
+    }
+
+    if (btnSubmitForm) {
+      btnSubmitForm.addEventListener("click", () => {
+        executeAutoFill(config, "btnSubmitForm");
+      });
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  STEP 6 — FORM AUTO-FILL
+  // ═══════════════════════════════════════════════════════════
+
+  function executeAutoFill(config, triggerButtonId = null) {
+    const btnToDisable = document.getElementById(triggerButtonId || "btnValidate");
+    if (btnToDisable) {
+      btnToDisable.disabled = true;
+      btnToDisable.innerHTML = '<span class="loader-spinner" style="width:16px;height:16px;border-width:2px;margin-right:8px;"></span> भर रहा है...';
     }
 
     // Re-query the active tab at click time — don't rely on stale isFormDetected at panel init
