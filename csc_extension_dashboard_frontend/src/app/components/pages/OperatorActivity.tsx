@@ -139,7 +139,7 @@ export default function OperatorActivity() {
   };
 
   const highRiskCount = displaySessions.filter((s) => getRiskLabel(s) === 'High').length;
-  const totalWarnings = displaySessions.reduce((s, sum) => sum + getWarningCount(s), 0);
+  const totalWarnings = displaySessions.reduce((sum, s) => sum + getWarningCount(s), 0);
   const lowRiskCount = displaySessions.filter((s) => getRiskLabel(s) === 'Low').length;
   const acceptanceRate = displaySessions.length > 0 ? Math.round((lowRiskCount / displaySessions.length) * 100) : 82;
 
