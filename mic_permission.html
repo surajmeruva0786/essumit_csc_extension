@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CSC Sahayak — Microphone Permission</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #FFF3E0, #E8F5E9);
+    }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 40px 36px;
+      max-width: 420px;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    }
+    .icon { font-size: 56px; margin-bottom: 16px; }
+    h2 { font-size: 20px; color: #1A1A2E; margin-bottom: 8px; }
+    p { font-size: 14px; color: #5A5A7A; line-height: 1.6; margin-bottom: 24px; }
+    
+    .btn {
+      background: #F8931D; /* Saffron */
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      width: 100%;
+      margin-bottom: 16px;
+    }
+    .btn:hover { background: #e07b13; }
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { 
+      background: #ccc; 
+      cursor: not-allowed; 
+      transform: none;
+    }
+    
+    .status { font-size: 14px; font-weight: 600; margin-top: 16px; }
+    .status.success { color: #138808; }
+    .status.error { color: #D32F2F; }
+    .status.waiting { color: #FF9933; }
+    .hint { font-size: 12px; color: #8E8EA0; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">🎙️</div>
+    <h2>माइक्रोफ़ोन अनुमति / Microphone Permission</h2>
+    <p>CSC सहायक को वॉइस असिस्टेंट के लिए माइक्रोफ़ोन की अनुमति चाहिए।<br>
+       सुरक्षा कारणों से, <strong>नीचे दिए गए बटन पर क्लिक करें</strong> और फिर ब्राउज़र प्रॉम्प्ट में "Allow" चुनें।</p>
+    
+    <button id="reqBtn" class="btn">अनुमति दें / Click to Allow</button>
+       
+    <div id="status" class="status" style="display: none;"></div>
+    <div id="hint" class="hint"></div>
+  </div>
+
+  <script src="mic_permission.js"></script>
+</body>
+</html>

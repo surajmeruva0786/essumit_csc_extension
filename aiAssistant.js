@@ -9,6 +9,32 @@ const AIAssistant = (() => {
   // Use only currently supported Groq chat models. Avoid deprecated llama3-* models.
   const GROQ_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"];
 
+  // ─── Knowledge base (schemes + services) ─────────────────────────────────
+  let KB_SERVICES = null;  // from knowledge_base/csc_kb1.json
+
+  async function loadKnowledgeBase() {
+    if (KB_SERVICES) return KB_SERVICES;
+    if (typeof chrome === "undefined" || !chrome.runtime?.getURL) {
+      KB_SERVICES = [];
+      return KB_SERVICES;
+    }
+    try {
+      const url = chrome.runtime.getURL("knowledge_base/csc_kb1.json");
+      const res = await fetch(url);
+      if (!res.ok) {
+        KB_SERVICES = [];
+        return KB_SERVICES;
+      }
+      const text = await res.text();
+      // File is a JSON-ish string; ensure we parse it safely
+      KB_SERVICES = JSON.parse(text);
+    } catch (e) {
+      console.warn("[AIAssistant] Failed to load knowledge base:", e);
+      KB_SERVICES = [];
+    }
+    return KB_SERVICES;
+  }
+
   /** Get API key: from argument, then chrome.storage, then default. Always returns a Promise. */
   function getApiKey(apiKey) {
     if (apiKey && String(apiKey).trim()) return Promise.resolve(String(apiKey).trim());
@@ -144,6 +170,124 @@ If an issue applies to multiple fields, create separate issue objects, one per f
   }
 
   /**
+   * Chat helper for CSC operators.
+   * Uses knowledge base + optional current application context (serviceId, extractedFields, citizen profile).
+   *
+   * context: {
+   *   serviceId?: string;
+   *   extractedFields?: Record<string, any>;
+   *   citizenName?: string;
+   *   citizenPhone?: string;
+   * }
+   */
+  async function chat(question, context = {}, apiKey) {
+    const resolvedKey = await getApiKey(apiKey);
+    const kb = await loadKnowledgeBase();
+
+    const qLower = String(question || "").toLowerCase();
+    const serviceId = context.serviceId || "";
+    const extractedFields = context.extractedFields || {};
+
+    // Pick at most 8 relevant services from KB based on simple keyword matching
+    let candidates = Array.isArray(kb) ? kb : [];
+    if (serviceId) {
+      candidates = candidates.filter(s => String(s.service_id || s.serviceId || "").includes(serviceId));
+    } else if (qLower) {
+      candidates = candidates
+        .map(s => {
+          const name = String(s.service_name || s.serviceName || "").toLowerCase();
+          const tags = (s.tags || "").toLowerCase();
+          let score = 0;
+          if (qLower.includes(name.split(" ")[0] || "")) score += 3;
+          if (name.includes("birth") && qLower.includes("birth")) score += 2;
+          if (name.includes("death") && qLower.includes("death")) score += 2;
+          if (tags && qLower.split(/\s+/).some(w => tags.includes(w))) score += 1;
+          return { s, score };
+        })
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 8)
+        .map(x => x.s);
+    } else {
+      candidates = candidates.slice(0, 8);
+    }
+
+    const kbSummary = candidates.map((s, idx) => {
+      const name = s.service_name || s.serviceName || s.service_id || `Service ${idx + 1}`;
+      const docs = Array.isArray(s.documents)
+        ? s.documents.map(d => (d.document_type || d.type || d.name)).filter(Boolean)
+        : [];
+      const eligibility = (s.eligibility_rules || s.eligibility || []).slice(0, 5);
+      const processing = s.processing_time || s.processing || "";
+      return {
+        id: s.service_id || s.serviceId || name,
+        name,
+        documents: docs,
+        eligibility,
+        processingTime: processing
+      };
+    });
+
+    const contextSnippet = {
+      serviceId,
+      extractedFields,
+      citizenName: context.citizenName || null,
+      citizenPhone: context.citizenPhone || null
+    };
+
+    const systemPrompt = `
+You are the CSC Sahayak AI Assistant for Common Service Centre operators in India.
+
+Your job:
+- Help operators decide which government scheme / service is best for a specific citizen.
+- Explain eligibility, required documents, important rules and which portal/process to follow.
+- When helpful, compare 2-3 possible schemes and clearly recommend 1–2 best options.
+
+You have access to a structured knowledge base of schemes and services (JSON below) and optional live context from the current application.
+
+KNOWLEDGE_BASE (partial, summarised):
+${JSON.stringify(kbSummary, null, 2)}
+
+CURRENT_APPLICATION_CONTEXT (may be empty):
+${JSON.stringify(contextSnippet, null, 2)}
+
+Instructions:
+- ALWAYS answer in **Hindi first, then English** in the same message.
+- For Hindi, use simple, operator-friendly language (not very formal).
+- For English, keep it short and clear.
+- If you are not fully sure, say so and suggest that the operator verify on the official portal (e.g., serviceonline.gov.in, state e‑district, etc.).
+- If the operator's question is generic (e.g., "which scheme for widow with 3 children?"), infer likely state‑level or central schemes from your knowledge and the knowledge base.
+- If information is missing (for income, age, caste, etc.), clearly list **what questions the operator should ask the citizen** before deciding.
+- If extractedFields are provided, USE them to tailor the advice (age, gender, address, income, etc.).
+- NEVER invent official URLs; if a URL is present in the knowledge base, you may use it, otherwise refer generically to the official portal.
+`;
+
+    const userPrompt = `
+Operator Question:
+${question}
+
+Please give:
+1) Short decision summary (Hindi).
+2) Recommended scheme(s) with eligibility and key benefits (Hindi).
+3) Required documents (Hindi, bullet list).
+4) Step-by-step application process (Hindi, bullet list).
+5) Short English summary (2–4 bullet points).`;
+
+    const responseText = await callGroq(resolvedKey, {
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      temperature: 0.25,
+      max_tokens: 900
+    });
+
+    if (!responseText) {
+      return "क्षमा करें, अभी AI सर्वर से कनेक्ट नहीं हो सका। कृपया बाद में फिर से कोशिश करें या आधिकारिक पोर्टल पर नियम देख लें।\n\nSorry, I could not reach the AI server right now. Please try again later or double‑check on the official government portal.";
+    }
+    return responseText;
+  }
+
+  /**
    * Offline validation engine using basic heuristics when AI is unavailable.
    */
   function runOfflineValidation(fields, rules) {
@@ -230,7 +374,8 @@ If an issue applies to multiple fields, create separate issue objects, one per f
 
   return {
     validateApplication,
-    pickBestDropdownOption
+    pickBestDropdownOption,
+    chat
   };
 
 })();

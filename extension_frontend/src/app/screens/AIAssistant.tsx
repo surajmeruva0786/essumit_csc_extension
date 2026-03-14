@@ -1,6 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { Bot, User, Send, FileText, ArrowLeft } from 'lucide-react';
+import { Bot, User, Send, FileText, ArrowLeft, Mic, MicOff, Volume2 } from 'lucide-react';
+import { chat } from '../api/chatApi';
+import { getAssistantContext } from '../context/assistantContext';
+import { useVoiceInput, useTextToSpeech } from '../hooks/useVoiceAssistant';
 
 interface Message {
   id: string;
@@ -18,19 +21,15 @@ const INITIAL_MESSAGES: Message[] = [
   }
 ];
 
-const SAMPLE_RESPONSES: Record<string, string> = {
-  'birth': 'जन्म प्रमाण पत्र के लिए आवश्यक दस्तावेज़:\n\n1. अस्पताल से जन्म पर्ची\n2. माता-पिता का आधार कार्ड\n3. पता प्रमाण\n4. पासपोर्ट साइज फोटो\n\nक्या आप आवेदन शुरू करना चाहेंगे?',
-  'pension': 'पेंशन योजना के लिए पात्रता:\n\n• वृद्धावस्था पेंशन: 60+ वर्ष\n• विधवा पेंशन: 18-60 वर्ष\n• दिव्यांग पेंशन: 40% विकलांगता\n\nआवश्यक दस्तावेज़: आधार, बैंक पासबुक, आय प्रमाण पत्र\n\nकौन सी पेंशन योजना चाहिए?',
-  'ration': 'राशन कार्ड आवेदन प्रक्रिया:\n\n1. ऑनलाइन/ऑफलाइन आवेदन करें\n2. आवश्यक दस्तावेज़ जमा करें\n3. सत्यापन की प्रतीक्षा करें\n4. 15-30 दिनों में राशन कार्ड\n\nआवश्यक दस्तावेज़: आधार, निवास प्रमाण, आय प्रमाण, फोटो',
-  'default': 'मैं इन सेवाओं में मदद कर सकता हूं:\n\n• जन्म/मृत्यु प्रमाण पत्र\n• आय/जाति प्रमाण पत्र\n• पेंशन योजनाएं\n• राशन कार्ड\n• अन्य सरकारी सेवाएं\n\nकृपया अपनी आवश्यकता बताएं।'
-};
-
 export default function AIAssistant() {
   const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const { isListening, startListening, stopListening, error: voiceError, supported: voiceSupported } = useVoiceInput();
+  const { speak, stopSpeaking, isSpeaking, supported: ttsSupported } = useTextToSpeech();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -40,50 +39,68 @@ export default function AIAssistant() {
     scrollToBottom();
   }, [messages]);
 
-  const getBotResponse = (userMessage: string): string => {
-    const msg = userMessage.toLowerCase();
-    
-    if (msg.includes('birth') || msg.includes('जन्म')) {
-      return SAMPLE_RESPONSES.birth;
-    } else if (msg.includes('pension') || msg.includes('पेंशन')) {
-      return SAMPLE_RESPONSES.pension;
-    } else if (msg.includes('ration') || msg.includes('राशन')) {
-      return SAMPLE_RESPONSES.ration;
-    } else if (msg.includes('hello') || msg.includes('hi') || msg.includes('नमस्ते')) {
-      return 'नमस्ते! मैं आपकी सहायता के लिए यहाँ हूँ। कृपया अपना प्रश्न पूछें।\n\nHello! I\'m here to help you. Please ask your question.';
-    } else if (msg.includes('application') || msg.includes('आवेदन')) {
-      return 'आवेदन शुरू करने के लिए:\n\n1. ऊपर "Back" बटन दबाएं\n2. "नया आवेदन शुरू करें" चुनें\n3. अपनी जानकारी भरें\n\nया यहाँ अपनी समस्या बताएं, मैं मदद करूँगा।';
-    }
-    
-    return SAMPLE_RESPONSES.default;
-  };
+  const sendText = useCallback(async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
 
-  const handleSend = () => {
-    if (!input.trim()) return;
-
-    // Add user message
     const userMessage: Message = {
       id: Date.now().toString(),
       type: 'user',
-      content: input.trim(),
+      content: trimmed,
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setIsTyping(true);
 
-    // Simulate bot typing and response
-    setTimeout(() => {
+    try {
+      const context = getAssistantContext();
+      const response = await chat(trimmed, context);
       const botResponse: Message = {
         id: (Date.now() + 1).toString(),
         type: 'bot',
-        content: getBotResponse(input),
+        content: response,
         timestamp: new Date(),
       };
-      setMessages(prev => [...prev, botResponse]);
+      setMessages((prev) => [...prev, botResponse]);
+      // TTS auto-play disabled per user request
+    } catch (e) {
+      console.warn('[AIAssistant] Chat error:', e);
+      const fallback: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'bot',
+        content: 'क्षमा करें, कोई त्रुटि हुई। कृपया फिर से कोशिश करें।\n\nSorry, something went wrong. Please try again.',
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, fallback]);
+    } finally {
       setIsTyping(false);
-    }, 1000 + Math.random() * 1000);
+    }
+  }, [ttsSupported, speak]);
+
+  const handleSend = () => sendText(input);
+
+  const handleVoiceToggle = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening(
+        (transcript) => setInput(transcript),
+        // Auto-send when voice input stops
+        (finalTranscript) => {
+          if (finalTranscript) sendText(finalTranscript);
+        }
+      );
+    }
+  };
+
+  const handleSpeakMessage = (content: string) => {
+    if (isSpeaking) {
+      stopSpeaking();
+    } else {
+      speak(content);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -110,7 +127,7 @@ export default function AIAssistant() {
           </div>
           <div>
             <div className="text-white text-sm font-semibold">AI सहायक</div>
-            <div className="text-white/60 text-[10px]">Always available</div>
+            <div className="text-white/60 text-[10px]">Chat & Voice</div>
           </div>
         </div>
         <div className="w-4"></div>
@@ -131,29 +148,40 @@ export default function AIAssistant() {
               } rounded-lg p-3 shadow-sm`}
             >
               {/* Message Header */}
-              <div className="flex items-center gap-2 mb-1.5">
-                <div
-                  className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                    message.type === 'user'
-                      ? 'bg-white/20'
-                      : 'bg-saffron/10'
-                  }`}
-                >
-                  {message.type === 'user' ? (
-                    <User className={`w-3 h-3 ${message.type === 'user' ? 'text-white' : 'text-saffron'}`} strokeWidth={2} />
-                  ) : (
-                    <Bot className={`w-3 h-3 ${message.type === 'user' ? 'text-white' : 'text-saffron'}`} strokeWidth={2} />
-                  )}
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                      message.type === 'user'
+                        ? 'bg-white/20'
+                        : 'bg-saffron/10'
+                    }`}
+                  >
+                    {message.type === 'user' ? (
+                      <User className={`w-3 h-3 ${message.type === 'user' ? 'text-white' : 'text-saffron'}`} strokeWidth={2} />
+                    ) : (
+                      <Bot className={`w-3 h-3 ${message.type === 'user' ? 'text-white' : 'text-saffron'}`} strokeWidth={2} />
+                    )}
+                  </div>
+                  <span
+                    className={`text-[10px] font-semibold ${
+                      message.type === 'user'
+                        ? 'text-white/80'
+                        : 'text-muted-text'
+                    }`}
+                  >
+                    {message.type === 'user' ? 'You' : 'CSC Assistant'}
+                  </span>
                 </div>
-                <span
-                  className={`text-[10px] font-semibold ${
-                    message.type === 'user'
-                      ? 'text-white/80'
-                      : 'text-muted-text'
-                  }`}
-                >
-                  {message.type === 'user' ? 'You' : 'CSC Assistant'}
-                </span>
+                {message.type === 'bot' && ttsSupported && (
+                  <button
+                    onClick={() => handleSpeakMessage(message.content)}
+                    className={`p-1 rounded hover:bg-saffron/20 transition-colors ${isSpeaking ? 'text-saffron' : 'text-muted-text'}`}
+                    title="Read aloud"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" strokeWidth={2} />
+                  </button>
+                )}
               </div>
 
               {/* Message Content */}
@@ -203,6 +231,11 @@ export default function AIAssistant() {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Voice error */}
+      {voiceError && (
+        <div className="px-4 py-1 text-xs text-red-600">{voiceError}</div>
+      )}
+
       {/* Quick Actions */}
       <div className="px-4 py-2 border-t border-border-custom bg-slate-50">
         <div className="flex flex-wrap gap-2">
@@ -230,22 +263,55 @@ export default function AIAssistant() {
         </div>
       </div>
 
+      {/* Listening Status */}
+      {isListening && (
+        <div className="px-4 py-1.5 bg-red-50 border-t border-red-200 flex items-center gap-2">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+          </span>
+          <span className="text-xs text-red-600 font-medium">🎙️ सुन रहा है... / Listening...</span>
+        </div>
+      )}
+
       {/* Input Area */}
       <div className="px-4 py-3 border-t border-border-custom bg-white flex-shrink-0">
         <div className="flex gap-2">
+          {voiceSupported && (
+            <button
+              onClick={handleVoiceToggle}
+              disabled={isTyping}
+              className={`relative w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                isListening
+                  ? 'bg-red-500 text-white shadow-lg shadow-red-500/40'
+                  : 'bg-slate-100 hover:bg-slate-200 text-navy'
+              }`}
+              title={isListening ? 'बंद करें / Stop listening' : 'बोलें / Voice input'}
+            >
+              {isListening && (
+                <span className="absolute inset-0 rounded-full animate-ping bg-red-400 opacity-30"></span>
+              )}
+              {isListening ? (
+                <MicOff className="w-4 h-4 relative z-10" strokeWidth={2} />
+              ) : (
+                <Mic className="w-4 h-4" strokeWidth={2} />
+              )}
+            </button>
+          )}
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="अपना सवाल पूछें... Type your question..."
+            placeholder={isListening ? "🎙️ बोलिए... / Speaking..." : voiceSupported ? "सवाल पूछें या माइक दबाएं... / Type or speak..." : "सवाल पूछें... / Type your question..."}
             className="flex-1 h-10 px-3 rounded-md border border-border-custom bg-surface text-sm text-navy placeholder:text-muted-text focus:outline-none focus:ring-2 focus:ring-saffron focus:border-transparent"
+            readOnly={isListening}
           />
           <button
             onClick={handleSend}
-            disabled={!input.trim() || isTyping}
+            disabled={!input.trim() || isTyping || isListening}
             className={`w-10 h-10 rounded-md flex items-center justify-center transition-colors ${
-              input.trim() && !isTyping
+              input.trim() && !isTyping && !isListening
                 ? 'bg-saffron hover:bg-saffron-hover text-white'
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed'
             }`}

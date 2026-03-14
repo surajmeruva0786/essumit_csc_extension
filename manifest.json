@@ -52,7 +52,10 @@
     {
       "resources": [
         "worker.min.js",
-        "tesseract-core-simd-lstm.wasm.js"
+        "tesseract-core-simd-lstm.wasm.js",
+        "knowledge_base/*",
+        "mic_permission.html",
+        "mic_permission.js"
       ],
       "matches": ["<all_urls>"]
     }

@@ -8,6 +8,7 @@ import { triggerAutofillInCurrentTab } from '../api/autofillApi';
 import { validateExtraction, type ValidationResult as ValidationResultType } from '../api/validationApi';
 import { getBackendServiceId } from '../config/serviceConfig';
 import { getFieldLabel } from '../config/fieldLabels';
+import { setAssistantContext } from '../context/assistantContext';
 
 export default function DataReview() {
   const navigate = useNavigate();
@@ -64,6 +65,14 @@ export default function DataReview() {
     });
 
     setFields(prepared);
+
+    // Set assistant context for AI chat (service, extraction, citizen info)
+    setAssistantContext({
+      serviceId: backendServiceId || serviceId,
+      extractedFields: extraction.extractedFields,
+      citizenName: name,
+      citizenPhone: mobile,
+    });
 
     // Run AI validation
     (async () => {

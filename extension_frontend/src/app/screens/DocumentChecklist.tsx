@@ -6,6 +6,8 @@ import NavigationButtons from '../components/NavigationButtons';
 import { getServiceById } from '../config/services';
 import { getServiceConfig } from '../config/serviceConfig';
 import { getFormFieldsForExtraction } from '../api/formScanApi';
+import { getBackendServiceId } from '../config/serviceConfig';
+import { setAssistantContext } from '../context/assistantContext';
 
 interface Document {
   id: string;
@@ -66,6 +68,17 @@ export default function DocumentChecklist() {
     setFilesById({});
     setFormFieldsCache(null); // Rescan when service changes
   }, [serviceId]);
+
+  // Set assistant context for AI chat
+  useEffect(() => {
+    if (serviceId) {
+      setAssistantContext({
+        serviceId: getBackendServiceId(serviceId) || serviceId,
+        citizenName: name,
+        citizenPhone: mobile,
+      });
+    }
+  }, [serviceId, name, mobile]);
 
   // Single hidden file input reused for all documents
   const fileInputRef = useRef<HTMLInputElement | null>(null);
