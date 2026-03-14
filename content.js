@@ -68,9 +68,48 @@
 
   // ─── Auto‐Fill + Form Scanning (triggered by panel) ────────
 
+  /**
+   * Dismiss common full-page loading overlays so the form is accessible after auto-fill.
+   * Many government portals keep a loading overlay visible; we hide likely candidates.
+   */
+  function dismissPageLoadingOverlay() {
+    const candidates = [
+      "[class*='loading'][class*='overlay']",
+      "[id*='loading'][id*='overlay']",
+      "[class*='loader']",
+      ".loading-overlay",
+      ".page-loader",
+      "[class*='blockui']",
+      "[id*='blockui']",
+      "[class*='loading'][style*='fixed']",
+      "div[style*='position: fixed'][style*='z-index']"
+    ];
+    const toHide = [];
+    candidates.forEach(sel => {
+      try {
+        document.querySelectorAll(sel).forEach(el => {
+          const style = window.getComputedStyle(el);
+          const isFixed = style.position === "fixed" || el.style.position === "fixed";
+          const zIndex = parseInt(style.zIndex || el.style.zIndex || "0", 10);
+          const coversScreen = isFixed && (zIndex > 100 || el.offsetWidth > 100 && el.offsetHeight > 100);
+          if (coversScreen || el.classList.toString().toLowerCase().includes("loading")) {
+            toHide.push(el);
+          }
+        });
+      } catch (e) { /* ignore invalid selector */ }
+    });
+    toHide.forEach(el => {
+      if (el && el.parentNode) {
+        el.style.setProperty("display", "none", "important");
+        el.setAttribute("data-csc-dismissed", "1");
+      }
+    });
+  }
+
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "AUTO_FILL_FORM") {
       const result = autoFillForm(message.fields, message.selectors, message.confidenceMap);
+      setTimeout(dismissPageLoadingOverlay, 400);
       sendResponse(result);
     } else if (message.type === "SCAN_FORM_FIELDS") {
       const scannedFields = scanFormFields();

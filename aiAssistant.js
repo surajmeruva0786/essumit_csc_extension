@@ -1,33 +1,83 @@
 // aiAssistant.js
-// Provides the AI Validation Assistant using Groq API or an offline fallback
+// Provides the AI Validation Assistant using Groq API (online) with offline fallback
 
 const AIAssistant = (() => {
   "use strict";
 
-  // Use the Groq API key (assumed available either from config or user settings)
-  // For the purpose of this implementation, we map the claude-sonnet-4 alias to a capable Groq model
-  // as the user specified "you can use groq models"
   const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-  const GROQ_API_KEY = "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";
-  
-  // NOTE: For this demo/extension, we might just assume the user has set it up via options, 
-  // but to make things work smoothly without immediate configuration, we will rely heavily 
-  // on the offline fallback if the key is missing or invalid.
-  
+  const DEFAULT_GROQ_API_KEY = "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";
+  // Use only currently supported Groq chat models. Avoid deprecated llama3-* models.
+  const GROQ_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"];
+
+  /** Get API key: from argument, then chrome.storage, then default. Always returns a Promise. */
+  function getApiKey(apiKey) {
+    if (apiKey && String(apiKey).trim()) return Promise.resolve(String(apiKey).trim());
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      return new Promise((resolve) => {
+        chrome.storage.local.get(["groqApiKey", "GROQ_API_KEY"], (items) => {
+          const key = items.groqApiKey || items.GROQ_API_KEY || DEFAULT_GROQ_API_KEY;
+          resolve(key && String(key).trim() ? String(key).trim() : DEFAULT_GROQ_API_KEY);
+        });
+      });
+    }
+    return Promise.resolve(DEFAULT_GROQ_API_KEY);
+  }
+
   /**
-   * Validate the extracted form fields against the service-specific rules.
-   * @param {string} serviceType - The ID of the service (e.g., 'income_certificate')
-   * @param {Object} extractedFields - The key-value pairs of extracted data
-   * @param {string} apiKey - Optional API key if retrieved from storage
-   * @returns {Promise<Object>} Resolves to a structured JSON validation result
+   * Call Groq API with optional retry and model fallback.
    */
-  async function validateApplication(serviceType, extractedFields, apiKey = GROQ_API_KEY) {
+  async function callGroq(apiKey, body, retries = 2) {
+    let lastError = null;
+    for (const model of GROQ_MODELS) {
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          const res = await fetch(GROQ_API_URL, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${apiKey}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ ...body, model })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const raw = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+            return raw ? String(raw).trim() : null;
+          }
+          const text = await res.text();
+          lastError = { status: res.status, text };
+          if (res.status === 401) {
+            console.warn("[CSC Sahayak] Groq API: Invalid or expired API key (401). Set groqApiKey in extension storage or use a valid key.");
+            return null;
+          }
+          if (res.status === 429) {
+            if (attempt < retries) await new Promise(r => setTimeout(r, 1500));
+            continue;
+          }
+          if (res.status >= 500 && attempt < retries) {
+            await new Promise(r => setTimeout(r, 1000));
+            continue;
+          }
+        } catch (err) {
+          lastError = err;
+          if (attempt < retries) await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+    }
+    if (lastError) console.warn("[CSC Sahayak] Groq API error:", lastError);
+    return null;
+  }
+
+  /**
+   * Validate the extracted form fields against the service-specific rules (online AI when possible).
+   */
+  async function validateApplication(serviceType, extractedFields, apiKey) {
+    const resolvedKey = await getApiKey(apiKey);
     const rules = window.ValidationRules ? (window.ValidationRules[serviceType] || window.ValidationRules["default"]) : [];
     const defaultRules = window.ValidationRules ? window.ValidationRules["default"] : [];
     const allRules = [...new Set([...rules, ...defaultRules])];
 
-    // Build the Prompt
-    const systemPrompt = `You are the CSC Sahayak AI Validation Assistant. Your job is to analyze the extracted fields for a government application and predict the risk of rejection based strictly on the provided eligibility rules.
+    const systemPrompt = `You are the CSC Sahayak AI Validation Assistant. Analyze the extracted fields for a government application and predict the risk of rejection based strictly on the provided eligibility rules.
 
 Service: ${serviceType}
 
@@ -37,68 +87,53 @@ ${allRules.map(r => "- " + r).join("\n")}
 Extracted Information:
 ${JSON.stringify(extractedFields, null, 2)}
 
-You must return a raw JSON object with no markdown wrapping, strictly matching this schema:
+Return ONLY a raw JSON object (no markdown), strictly matching this schema:
 {
   "overallRisk": "HIGH|MEDIUM|LOW",
-  "riskScore": (a float between 0.0 and 1.0),
+  "riskScore": (float 0.0-1.0),
   "issues": [
     {
       "field": "field_name",
       "severity": "CRITICAL|WARNING|INFO",
-      "message": "English explanation of the issue",
-      "messageHindi": "Hindi explanation of the issue",
+      "message": "English explanation",
+      "messageHindi": "Hindi explanation",
       "suggestion": "How the operator can fix this"
     }
   ],
   "eligibilityVerdict": "LIKELY_APPROVED|LIKELY_REJECTED|NEEDS_REVIEW",
-  "summaryHindi": "1-2 sentences summarizing the overall status in Hindi",
-  "summaryEnglish": "1-2 sentences summarizing the overall status in English"
+  "summaryHindi": "1-2 sentences in Hindi",
+  "summaryEnglish": "1-2 sentences in English"
 }
 
-If any critical rules are violated (like age mismatch, missing mandatory fields), set overallRisk to HIGH and eligibilityVerdict to LIKELY_REJECTED.
-If data looks good but has minor warnings, set MEDIUM and NEEDS_REVIEW.
-If everything perfectly aligns with rules, set LOW and LIKELY_APPROVED.`;
+If critical rules are violated (age mismatch, missing mandatory fields), set overallRisk to HIGH and eligibilityVerdict to LIKELY_REJECTED.
+If data looks good with minor warnings, set MEDIUM and NEEDS_REVIEW.
+If everything aligns with rules, set LOW and LIKELY_APPROVED.`;
 
-    // Attempt Online AI Validation if API Key is present
-    if (apiKey) {
+    const responseText = await callGroq(resolvedKey, {
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: "Analyze the data and return only the JSON object." }
+      ],
+      temperature: 0.1,
+      response_format: { type: "json_object" }
+    });
+
+    if (responseText) {
       try {
-        const response = await fetch(GROQ_API_URL, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${apiKey}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            model: "llama3-70b-8192", // A capable instruction-following model on Groq
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: "Analyze the data and return the JSON." }
-            ],
-            temperature: 0.1,
-            response_format: { type: "json_object" }
-          })
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          let parsedResult = data.choices[0].message.content;
-          
-          // Cleanup markdown if the model hallucinated it despite instructions
-          if (parsedResult.startsWith("```json")) {
-            parsedResult = parsedResult.replace(/```json\n?/, "").replace(/```$/, "");
-          }
-          
-          return JSON.parse(parsedResult);
-        } else {
-          console.warn("Groq API failed. Falling back to offline validation.", await response.text());
+        let parsed = responseText;
+        if (parsed.startsWith("```json")) parsed = parsed.replace(/```json\n?/, "").replace(/```$/, "");
+        else if (parsed.startsWith("```")) parsed = parsed.replace(/```\n?/, "").replace(/```$/, "");
+        const result = JSON.parse(parsed.trim());
+        if (result && typeof result.overallRisk === "string") {
+          result.isOfflineFallback = false;
+          return result;
         }
-      } catch (err) {
-        console.warn("Network error reaching Groq. Falling back to offline validation.", err);
+      } catch (e) {
+        console.warn("[CSC Sahayak] Groq response parse error:", e);
       }
     }
 
-    // Fallback: Offline Rule-Based Engine
-    console.log("Running offline rule-based validation...");
+    console.log("[CSC Sahayak] Using offline rule-based validation (AI unavailable or key invalid).");
     return runOfflineValidation(extractedFields, allRules);
   }
 
@@ -163,8 +198,33 @@ If everything perfectly aligns with rules, set LOW and LIKELY_APPROVED.`;
     };
   }
 
+  /**
+   * Use AI to pick the best dropdown option when extracted value does not exactly match.
+   */
+  async function pickBestDropdownOption(extractedValue, options) {
+    if (!extractedValue || !options || options.length === 0) return null;
+    const key = await getApiKey();
+    if (!key) return null;
+    const opts = options.slice(0, 100).map(o => ({ value: o.value || "", text: (o.text || o.value || "").trim() }));
+    const listStr = opts.map((o, i) => `${i + 1}. value="${o.value}" text="${o.text}"`).join("\n");
+    const responseText = await callGroq(key, {
+      messages: [
+        { role: "system", content: "Reply with ONLY the exact option value (the value= part) of the chosen option. If none match, reply with the first option's value." },
+        { role: "user", content: `Extracted text: "${String(extractedValue).trim()}"\n\nDropdown options:\n${listStr}\n\nWhich option value best matches? Reply with only that value.` }
+      ],
+      temperature: 0.1,
+      max_tokens: 100
+    });
+    if (!responseText) return opts[0] ? opts[0].value : null;
+    const chosen = responseText.replace(/^["']|["']$/g, "").trim();
+    const found = opts.find(o => String(o.value).trim() === chosen || String(o.text).trim() === chosen ||
+      chosen.includes(String(o.value).trim()) || chosen.includes(String(o.text).trim()));
+    return found ? found.value : (opts[0] ? opts[0].value : null);
+  }
+
   return {
-    validateApplication
+    validateApplication,
+    pickBestDropdownOption
   };
 
 })();

@@ -1077,9 +1077,14 @@
     if (btnCancelApp) {
       btnCancelApp.addEventListener("click", () => {
         btnCancelApp.disabled = true;
-        if(btnSubmitAnyway) btnSubmitAnyway.disabled = true;
+        if (btnSubmitAnyway) btnSubmitAnyway.disabled = true;
         addBotMessage("🚫 आवेदन रद्द कर दिया गया है।", "Application cancelled due to high rejection risk.", { error: true });
-        // Can trigger SMS integration here later
+        // Re-enable Validate so user can try again after making changes
+        const btnValidate = document.getElementById("btnValidate");
+        if (btnValidate) {
+          btnValidate.disabled = false;
+          btnValidate.innerHTML = "🤖 सत्यापित करें / Validate Application";
+        }
       });
     }
 
@@ -1108,7 +1113,7 @@
     }
 
     // Re-query the active tab at click time — don't rely on stale isFormDetected at panel init
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
       if (!tabs || tabs.length === 0) {
         handleAutoFillResponse({ error: "No active tab found" }, config);
         return;
@@ -1117,77 +1122,97 @@
       const activeTab = tabs[0];
       const tabUrl = activeTab.url || "";
 
-        // ─── Universal Auto-Fill ───
-        // We no longer restrict this to explicitly recognized government domains.
-        // The user can attempt auto-fill on any portal (e.g., internships, jobs).
-        
-        // Proceed with auto-fill
-        const finalFields = {};
-        const confidenceMap = {};
+      // ─── Universal Auto-Fill ───
+      const finalFields = {};
+      const confidenceMap = {};
 
-        Object.keys(sessionData.extractedData.extractedFields).forEach(key => {
-          const fieldData = sessionData.extractedData.extractedFields[key];
-          
-          // Read the latest value from the DOM input box in case the user edited it
-          const inputEl = document.getElementById(`field_${key}`);
-          if (inputEl) {
-            fieldData.value = inputEl.value;
-          }
-          
-          finalFields[key] = fieldData.value;
-          confidenceMap[key] = fieldData.confidence;
-        });
-
-        // ─── Use scanned selectors (dynamic) or URL-based mapping (fallback) ───
-        let selectors = {};
-
-        if (sessionData.scannedSelectors && Object.keys(sessionData.scannedSelectors).length > 0) {
-          // Direct selectors from form scanning — most reliable
-          selectors = sessionData.scannedSelectors;
-        } else if (typeof getFormMapping !== "undefined") {
-          // Fallback: URL-based or service-based mapping
-          let resolvedId = sessionData.selectedService;
-          const lowerUrl = tabUrl.toLowerCase();
-          const URL_MAPPING_RULES = [
-            { pattern: "userRegistrationAdditionalDetails", id: "cgedistrict_user_registration" },
-            { pattern: "incomeCertificate", id: "income_certificate" },
-            { pattern: "birthCertificate", id: "birth_certificate" },
-            { pattern: "deathCertificate", id: "death_certificate" },
-            { pattern: "domicile", id: "domicile_certificate" },
-            { pattern: "casteCertificate", id: "caste_certificate" },
-            { pattern: "oldAge", id: "old_age_pension" },
-            { pattern: "widow", id: "widow_pension" },
-            { pattern: "ration", id: "ration_card" }
-          ];
-
-          for (const rule of URL_MAPPING_RULES) {
-            if (lowerUrl.includes(rule.pattern.toLowerCase())) {
-              resolvedId = rule.id;
-              break;
-            }
-          }
-          const mapping = getFormMapping(resolvedId) || getFormMapping(sessionData.selectedService);
-          if (mapping) selectors = mapping.selectors;
+      Object.keys(sessionData.extractedData.extractedFields).forEach(key => {
+        const fieldData = sessionData.extractedData.extractedFields[key];
+        const inputEl = document.getElementById(`field_${key}`);
+        if (inputEl) {
+          fieldData.value = inputEl.value;
         }
+        finalFields[key] = fieldData.value;
+        confidenceMap[key] = fieldData.confidence;
+      });
 
-        // If content script isn't running yet on this tab, inject it first then fill
-        chrome.tabs.sendMessage(
-          activeTab.id,
-          {
-            type: "AUTO_FILL_FORM",
-            fields: finalFields,
-            selectors: selectors,
-            confidenceMap: confidenceMap
-          },
-          (response) => {
-            if (chrome.runtime.lastError) {
-              // Content script may not be injected yet — try scripting API
-              injectAndFill(activeTab.id, finalFields, selectors, confidenceMap, config);
-            } else {
-              handleAutoFillResponse(response || {}, config);
-            }
+      // ─── Use scanned selectors (dynamic) or URL-based mapping (fallback) ───
+      let selectors = {};
+      if (sessionData.scannedSelectors && Object.keys(sessionData.scannedSelectors).length > 0) {
+        selectors = sessionData.scannedSelectors;
+      } else if (typeof getFormMapping !== "undefined") {
+        let resolvedId = sessionData.selectedService;
+        const lowerUrl = tabUrl.toLowerCase();
+        const URL_MAPPING_RULES = [
+          { pattern: "userRegistrationAdditionalDetails", id: "cgedistrict_user_registration" },
+          { pattern: "incomeCertificate", id: "income_certificate" },
+          { pattern: "birthCertificate", id: "birth_certificate" },
+          { pattern: "deathCertificate", id: "death_certificate" },
+          { pattern: "domicile", id: "domicile_certificate" },
+          { pattern: "casteCertificate", id: "caste_certificate" },
+          { pattern: "oldAge", id: "old_age_pension" },
+          { pattern: "widow", id: "widow_pension" },
+          { pattern: "ration", id: "ration_card" }
+        ];
+        for (const rule of URL_MAPPING_RULES) {
+          if (lowerUrl.includes(rule.pattern.toLowerCase())) {
+            resolvedId = rule.id;
+            break;
           }
-        );
+        }
+        const mapping = getFormMapping(resolvedId) || getFormMapping(sessionData.selectedService);
+        if (mapping) selectors = mapping.selectors;
+      }
+
+      // ─── AI dropdown resolution: get form options and resolve non-matching dropdown values ───
+      try {
+        const scannedFields = await scanActiveTabFormFields();
+        const fieldKeyToOptions = {};
+        (scannedFields || []).forEach(f => {
+          if (f.options && f.options.length > 0) {
+            fieldKeyToOptions[f.fieldKey] = f.options;
+          }
+        });
+        for (const key of Object.keys(finalFields)) {
+          const opts = fieldKeyToOptions[key];
+          if (!opts || !opts.length) continue;
+          const val = finalFields[key];
+          if (!val || typeof val !== "string") continue;
+          const v = String(val).trim().toLowerCase();
+          const exactMatch = opts.some(o => {
+            const oVal = (o.value != null ? String(o.value).trim().toLowerCase() : "");
+            const oText = (o.text != null ? String(o.text).trim().toLowerCase() : "");
+            return oVal === v || oText === v;
+          });
+          if (exactMatch) continue;
+          if (typeof AIAssistant !== "undefined" && AIAssistant.pickBestDropdownOption) {
+            try {
+              const resolved = await AIAssistant.pickBestDropdownOption(val, opts);
+              if (resolved) finalFields[key] = resolved;
+            } catch (e) { /* keep original */ }
+          }
+        }
+      } catch (e) {
+        /* scan or resolve failed — proceed with original values */
+      }
+
+      // If content script isn't running yet on this tab, inject it first then fill
+      chrome.tabs.sendMessage(
+        activeTab.id,
+        {
+          type: "AUTO_FILL_FORM",
+          fields: finalFields,
+          selectors: selectors,
+          confidenceMap: confidenceMap
+        },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            injectAndFill(activeTab.id, finalFields, selectors, confidenceMap, config);
+          } else {
+            handleAutoFillResponse(response || {}, config);
+          }
+        }
+      );
     });
   }
 
@@ -1222,9 +1247,31 @@
     }
   }
 
+  /** Reset all validation/autofill buttons so loading spinner does not run forever */
+  function resetValidationAndAutofillButtons() {
+    const btnValidate = document.getElementById("btnValidate");
+    if (btnValidate) {
+      btnValidate.disabled = false;
+      btnValidate.innerHTML = "🤖 सत्यापित करें / Validate Application";
+    }
+    const btnSubmitAnyway = document.getElementById("btnSubmitAnyway");
+    if (btnSubmitAnyway) {
+      btnSubmitAnyway.disabled = false;
+      btnSubmitAnyway.innerHTML = "⚠️ फिर भी भरें / Fill Anyway";
+    }
+    const btnSubmitForm = document.getElementById("btnSubmitForm");
+    if (btnSubmitForm) {
+      btnSubmitForm.disabled = false;
+      btnSubmitForm.innerHTML = "✨ फॉर्म ऑटो-फ़िल करें / Auto-Fill Form";
+    }
+  }
+
   function handleAutoFillResponse(response, config) {
     const widget = document.getElementById("extractionWidget");
     if (widget) widget.classList.add("checklist-completed");
+
+    // Always clear loading state on validation card buttons so UI is not stuck
+    resetValidationAndAutofillButtons();
 
     const btnAutofill = document.getElementById("btnAutofill");
 
@@ -1284,11 +1331,19 @@
             `Success! ${filled}/${total} fields filled. Please verify highlighted fields.\n\nClick the button below once the form is successfully submitted.`
           );
 
-          // Render a button to manually trigger the end of the flow
+          // Allow user to edit and re-validate or re-autofill as many times until they submit
           const submitBtnId = `btnFormSubmitted_${Date.now()}`;
+          const validateAgainId = `btnValidateAgain_${Date.now()}`;
+          const autofillAgainId = `btnAutofillAgain_${Date.now()}`;
           const submitHtml = `
-            <div class="widget-actions">
-              <button class="btn btn-primary w-100" id="${submitBtnId}" style="margin-top: 10px;">
+            <div class="widget-actions" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
+              <button class="btn btn-secondary" id="${validateAgainId}">
+                🔄 फिर सत्यापित करें / Validate Again
+              </button>
+              <button class="btn btn-secondary" id="${autofillAgainId}">
+                ✨ फिर भरें / Auto-Fill Again
+              </button>
+              <button class="btn btn-primary w-100" id="${submitBtnId}">
                 ✅ फॉर्म जमा हो गया / Form Submitted
               </button>
             </div>
@@ -1302,6 +1357,14 @@
               btnFormSubmitted.textContent = "प्रसंस्करण... / Processing...";
               showFinalSummary(config);
             });
+          }
+          const btnValidateAgain = document.getElementById(validateAgainId);
+          if (btnValidateAgain) {
+            btnValidateAgain.addEventListener("click", () => runValidationAndShowDecision(config));
+          }
+          const btnAutofillAgain = document.getElementById(autofillAgainId);
+          if (btnAutofillAgain) {
+            btnAutofillAgain.addEventListener("click", () => executeAutoFill(config));
           }
         });
       }
