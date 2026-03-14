@@ -1087,13 +1087,12 @@
     const widget = document.getElementById("extractionWidget");
     if (!widget || !sessionData.extractedData || !sessionData.extractedData.extractedFields) return;
 
-    const issuesByField = {};
-    (result.issues || []).forEach(issue => {
-      const fieldKey = issue.field;
-      if (!fieldKey) return;
-      if (!issuesByField[fieldKey]) issuesByField[fieldKey] = [];
-      issuesByField[fieldKey].push(issue);
-    });
+    // Normalize helper to match fields even if naming differs slightly
+    function normalizeKey(str) {
+      return (str || "").toString().toLowerCase().replace(/[^a-z0-9]/g, "");
+    }
+
+    const allIssues = Array.isArray(result.issues) ? result.issues : [];
 
     // Overall summary at the top of the widget
     const summaryEl = document.getElementById("csc-validation-summary");
@@ -1119,7 +1118,15 @@
       const container = widget.querySelector(`.field-validation[data-validation-for="${key}"]`);
       if (!container) return;
 
-      const fieldIssues = issuesByField[key] || [];
+      const normKey = normalizeKey(key);
+
+      const fieldIssues = allIssues.filter(issue => {
+        const normIssue = normalizeKey(issue.field);
+        if (!normIssue) return false;
+        if (normIssue === normKey) return true;
+        if (normIssue.includes(normKey) || normKey.includes(normIssue)) return true;
+        return false;
+      });
       if (fieldIssues.length === 0) {
         container.innerHTML = `
           <div class="field-validation-ok">

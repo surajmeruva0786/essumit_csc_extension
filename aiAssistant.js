@@ -76,6 +76,7 @@ const AIAssistant = (() => {
     const rules = window.ValidationRules ? (window.ValidationRules[serviceType] || window.ValidationRules["default"]) : [];
     const defaultRules = window.ValidationRules ? window.ValidationRules["default"] : [];
     const allRules = [...new Set([...rules, ...defaultRules])];
+    const fieldKeys = Object.keys(extractedFields || {});
 
     const systemPrompt = `You are the CSC Sahayak AI Validation Assistant. Analyze the extracted fields for a government application and predict the risk of rejection based strictly on the provided eligibility rules.
 
@@ -107,7 +108,12 @@ Return ONLY a raw JSON object (no markdown), strictly matching this schema:
 
 If critical rules are violated (age mismatch, missing mandatory fields), set overallRisk to HIGH and eligibilityVerdict to LIKELY_REJECTED.
 If data looks good with minor warnings, set MEDIUM and NEEDS_REVIEW.
-If everything aligns with rules, set LOW and LIKELY_APPROVED.`;
+If everything aligns with rules, set LOW and LIKELY_APPROVED.
+
+Very important: when you populate the "field" property for each issue, you MUST use exactly one of these keys from the Extracted Information object so that it maps back to the UI fields:
+${fieldKeys.join(", ") || "(no fields provided)"}
+
+If an issue applies to multiple fields, create separate issue objects, one per field, each with "field" set to the most relevant key from this list.`;
 
     const responseText = await callGroq(resolvedKey, {
       messages: [
