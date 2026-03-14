@@ -33,7 +33,7 @@
     }
   ],
   "side_panel": {
-    "default_path": "panel.html"
+    "default_path": "extension_frontend/dist/index.html"
   },
   "action": {
     "default_title": "CSC Sahayak",

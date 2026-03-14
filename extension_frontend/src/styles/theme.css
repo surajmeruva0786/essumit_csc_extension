@@ -1,0 +1,177 @@
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* CSC Sahayak Color System - Professional Government Palette */
+  
+  /* Primary Saffron - More subdued */
+  --saffron-primary: #D56B14;
+  --saffron-deep: #B85810;
+  --saffron-light: #FEF6ED;
+  --saffron-hover: #C06012;
+  
+  /* Government Green - Professional */
+  --green-primary: #138944;
+  --green-deep: #0C6632;
+  --green-light: #F0F9F4;
+  --green-hover: #0F7539;
+  
+  /* Navy Anchor - Deep and authoritative */
+  --navy-primary: #1A2332;
+  --navy-light: #2C3E50;
+  --slate-text: #475569;
+  --muted-text: #64748B;
+  
+  /* Backgrounds & Surfaces - Clean and minimal */
+  --bg-primary: #F8FAFC;
+  --surface-white: #FFFFFF;
+  --border-color: #E2E8F0;
+  --border-strong: #CBD5E1;
+  
+  /* Risk Colors - Professional tones */
+  --risk-red: #DC2626;
+  --risk-amber: #D97706;
+  --risk-green: #138944;
+  
+  /* Typography */
+  --font-header: 'Inter', 'Noto Sans Devanagari', sans-serif;
+  --font-body: 'Inter', 'Noto Sans Devanagari', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Roboto Mono', monospace;
+  
+  /* Standard theme variables for compatibility */
+  --font-size: 16px;
+  --background: #F8FAFC;
+  --foreground: #1A2332;
+  --card: #FFFFFF;
+  --card-foreground: #1A2332;
+  --popover: #FFFFFF;
+  --popover-foreground: #1A2332;
+  --primary: #D56B14;
+  --primary-foreground: #FFFFFF;
+  --secondary: #138944;
+  --secondary-foreground: #FFFFFF;
+  --muted: #64748B;
+  --muted-foreground: #64748B;
+  --accent: #D56B14;
+  --accent-foreground: #FFFFFF;
+  --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
+  --border: #E2E8F0;
+  --input: transparent;
+  --input-background: #FFFFFF;
+  --switch-background: #E2E8F0;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --ring: #D56B14;
+  --radius: 6px;
+}
+
+@theme inline {
+  /* CSC Sahayak Custom Colors */
+  --color-saffron: var(--saffron-primary);
+  --color-saffron-deep: var(--saffron-deep);
+  --color-saffron-light: var(--saffron-light);
+  --color-saffron-hover: var(--saffron-hover);
+  --color-green: var(--green-primary);
+  --color-green-deep: var(--green-deep);
+  --color-green-light: var(--green-light);
+  --color-green-hover: var(--green-hover);
+  --color-navy: var(--navy-primary);
+  --color-navy-light: var(--navy-light);
+  --color-slate: var(--slate-text);
+  --color-muted-text: var(--muted-text);
+  --color-bg-primary: var(--bg-primary);
+  --color-surface: var(--surface-white);
+  --color-border-custom: var(--border-color);
+  --color-border-strong: var(--border-strong);
+  --color-risk-red: var(--risk-red);
+  --color-risk-amber: var(--risk-amber);
+  --color-risk-green: var(--risk-green);
+  
+  /* Standard theme colors */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+}
+
+@layer base {
+  * {
+    @apply border-border-custom outline-ring/50;
+  }
+
+  body {
+    @apply bg-bg-primary text-navy;
+    font-family: var(--font-body);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-header);
+  }
+
+  html {
+    font-size: var(--font-size);
+  }
+
+  h1 {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+
+  h2 {
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+
+  h3 {
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  h4 {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  label {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.5;
+  }
+
+  button {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.5;
+  }
+
+  input {
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.5;
+  }
+}

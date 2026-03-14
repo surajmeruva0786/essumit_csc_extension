@@ -18,7 +18,11 @@ from typing import Dict, List
 from patent_ocr_pipeline import process_document_with_patent_pipeline, extract_text_with_confidence_pipeline
 from gemini_ocr_extract import extract_text_from_pdf, extract_text_from_image, extract_fields_with_groq
 
-app = Flask(__name__, static_folder='filetract_web', static_url_path='')
+# Serve the new React/Vite frontend build (extension_frontend/dist) instead of filetract_web
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FRONTEND_DIST = os.path.join(BASE_DIR, "..", "extension_frontend", "dist")
+
+app = Flask(__name__, static_folder=FRONTEND_DIST, static_url_path="")
 CORS(app)
 
 # Configuration
@@ -29,6 +33,16 @@ MAX_FILE_SIZE = 16 * 1024 * 1024  # 16MB
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULTS_FOLDER, exist_ok=True)
+
+
+@app.route("/")
+def serve_frontend():
+    """Serve the new CSC Sahayak frontend SPA."""
+    index_path = os.path.join(app.static_folder, "index.html")
+    if os.path.exists(index_path):
+        return send_from_directory(app.static_folder, "index.html")
+    # Fallback message if frontend hasn't been built yet
+    return "Frontend build not found. Please run the extension_frontend build.", 200
 
 # In-memory job storage (can be upgraded to Redis/database)
 jobs = {}
