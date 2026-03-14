@@ -56,8 +56,10 @@ def save_application(app_data: Dict[str, Any]) -> str:
         
     date_str = app_data.get('date', datetime.now().strftime('%d/%m/%Y'))
     
-    fields_json = app_data.get('fields_json', '{}')
-    if isinstance(fields_json, dict):
+    fields_json = app_data.get('fields_json') or app_data.get('data_json', '{}')
+    if not fields_json:
+        fields_json = '{}'
+    if isinstance(fields_json, (list, dict)):
         fields_json = json.dumps(fields_json)
         
     cursor.execute('''
@@ -134,17 +136,27 @@ def get_staged_sync() -> Optional[Dict[str, Any]]:
         return None
         
     app_id = row['staged_application_id']
-    cursor.execute("SELECT fields_json FROM applications WHERE id = ?", (app_id,))
+    cursor.execute(
+        "SELECT id, citizen_name, service, date, status, fields_json FROM applications WHERE id = ?",
+        (app_id,)
+    )
     app_row = cursor.fetchone()
-    
     conn.close()
     
-    if app_row and app_row['fields_json']:
-        try:
-            return json.loads(app_row['fields_json'])
-        except:
-            return None
-    return None
+    if not app_row or not app_row['fields_json']:
+        return None
+
+    # Return full record — keep fields_json as a JSON STRING so the JS side can parse it
+    return {
+        'id': app_row['id'],
+        'name': app_row['citizen_name'],
+        'citizen_name': app_row['citizen_name'],
+        'service': app_row['service'],
+        'date': app_row['date'],
+        'status': app_row['status'],
+        'fields_json': app_row['fields_json'],   # Raw JSON string
+    }
+
 
 def clear_staged_sync():
     conn = get_db_connection()

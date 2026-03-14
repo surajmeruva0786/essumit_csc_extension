@@ -260,6 +260,38 @@ export default function DashboardOverview() {
     toast.info('Navigating to Rejection Insights page...');
   };
 
+  const handleLoadSync = async () => {
+    try {
+      const res = await fetch('http://127.0.0.1:5000/api/sync/get_staged');
+      if (!res.ok) throw new Error('API Error');
+      const data = await res.json();
+      
+      if (data.status === 'success' && data.data) {
+        // Send to content script to auto-fill
+        if (typeof chrome !== 'undefined' && chrome.tabs) {
+          chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+            if (tabs[0]?.id) {
+              chrome.tabs.sendMessage(tabs[0].id, {
+                action: 'FILL_FORM_DESKTOP', // Special action for desktop sync
+                data: JSON.parse(data.data.fields_json)
+              });
+              toast.success('Offline data loaded! Auto-filling form...');
+            } else {
+              toast.error('Could not find active form tab.');
+            }
+          });
+        } else {
+          toast.info(`Running outside extension. Data: ${data.data.applicant_name}`);
+        }
+      } else {
+        toast.error('No pending synced applications found.');
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to connect to Local Desktop App.');
+    }
+  };
+
   return (
     <div className="p-5 space-y-5">
       {/* Page header */}
@@ -276,6 +308,15 @@ export default function DashboardOverview() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* New Button for Offline Sync Handshake */}
+          <button
+            className="flex items-center gap-2 px-3 py-2 text-sm rounded text-white shadow-sm transition-opacity hover:opacity-90"
+            style={{ background: 'linear-gradient(135deg, #1A7A38, #2E9E50)' }}
+            onClick={handleLoadSync}
+          >
+            <Download size={15}/><span>Load Offline Sync ⚡</span>
+          </button>
+          
           <button
             className="flex items-center gap-2 px-3 py-2 text-sm rounded border transition-colors shadow-sm"
             style={{ borderColor: '#d1d5db', backgroundColor: '#fff', color: '#374151' }}

@@ -265,6 +265,51 @@
     } else if (message.type === "SCAN_FORM_FIELDS") {
       const scannedFields = scanFormFields();
       sendResponse(scannedFields);
+    } else if (message.action === "FILL_FORM_DESKTOP") {
+      // Handle the data specifically coming from the offline desktop sync
+      const desktopFields = message.data || [];
+      const liveFormFields = scanFormFields(); // Discover fields on current page
+      
+      const mappedFields = {};
+      const mappedSelectors = {};
+      const confidenceMap = {};
+      
+      // Attempt to map desktop fieldEn / field to a live form field
+      desktopFields.forEach(df => {
+        const val = df.extracted;
+        if (!val || val === '—' || val === '-') return;
+        
+        // Find best match in live fields based on English or Hindi label
+        const match = liveFormFields.find(lf => {
+           const labelLower = (lf.label || "").toLowerCase();
+           const labelHiLower = (lf.labelHi || "").toLowerCase();
+           const nameLower = (lf.fieldKey || "").toLowerCase();
+           
+           const targetEn = (df.fieldEn || "").toLowerCase();
+           const targetHi = (df.field || "").toLowerCase();
+           
+           // If they share common words
+           return (targetEn && (labelLower.includes(targetEn) || targetEn.includes(labelLower) || targetEn.includes(nameLower))) || 
+                  (targetHi && (labelHiLower.includes(targetHi) || targetHi.includes(labelHiLower)));
+        });
+        
+        if (match) {
+           mappedFields[match.fieldKey] = val;
+           mappedSelectors[match.fieldKey] = match.selector;
+           confidenceMap[match.fieldKey] = 0.95; // Assume high confidence for reviewed offline data
+        }
+      });
+      
+      const result = autoFillForm(mappedFields, mappedSelectors, confidenceMap);
+      
+      setTimeout(() => {
+        patchPortalLoadingToggle();
+        scheduleOverlayCleanup();
+        startTemporaryOverlayObserver(20000);
+        forceUnblockPageInteraction();
+      }, 300);
+      
+      sendResponse(result);
     }
     return true;
   });

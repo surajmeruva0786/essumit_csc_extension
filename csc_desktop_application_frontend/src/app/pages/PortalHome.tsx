@@ -1,26 +1,18 @@
 import React from 'react';
 import { Link } from 'react-router';
 const bannerImg = '/slider8.jpg.jpeg';
-const birthCertIcon = '';
-const deathCertIcon = '';
-const marriageIcon = '';
-const residenceIcon = '';
-const farmerIcon = '';
-const pensionIcon = '';
-const incomeIcon = '';
-const casteIcon = '';
 import { AshokChakra } from '../components/AshokChakra';
 
 const services = [
-  { emoji: '👶', label: 'जन्म प्रमाण पत्र', labelEn: 'Birth Certificate', days: '7 कार्य दिवस', fee: '₹30' },
-  { emoji: '🕊️', label: 'मृत्यु प्रमाण पत्र', labelEn: 'Death Certificate', days: '7 कार्य दिवस', fee: '₹30' },
-  { emoji: '📄', label: 'आय प्रमाण पत्र', labelEn: 'Income Certificate', days: '10 कार्य दिवस', fee: '₹20' },
-  { emoji: '🏷️', label: 'जाति प्रमाण पत्र', labelEn: 'Caste Certificate', days: '15 कार्य दिवस', fee: '₹20' },
-  { emoji: '🏠', label: 'निवास प्रमाण पत्र', labelEn: 'Residence Certificate', days: '10 कार्य दिवस', fee: '₹20' },
-  { emoji: '💍', label: 'विवाह पंजीकरण', labelEn: 'Marriage Registration', days: '15 कार्य दिवस', fee: '₹100' },
-  { emoji: '👴', label: 'पेंशन योजना', labelEn: 'Pension Schemes', days: '30 कार्य दिवस', fee: '₹0' },
-  { emoji: '🎓', label: 'शैक्षिक प्रमाण पत्र', labelEn: 'Educational Certificate', days: '7 कार्य दिवस', fee: '₹50' },
-  { emoji: '🌾', label: 'किसान पंजीकरण', labelEn: 'Farmer Registration', days: '5 कार्य दिवस', fee: '₹0' },
+  { icon: '/i1.png', emoji: '👶', label: 'जन्म प्रमाण पत्र', labelEn: 'Birth Certificate', days: '7 कार्य दिवस', fee: '₹30' },
+  { icon: '/i2.png', emoji: '🕊️', label: 'मृत्यु प्रमाण पत्र', labelEn: 'Death Certificate', days: '7 कार्य दिवस', fee: '₹30' },
+  { icon: '/i3.png', emoji: '📄', label: 'आय प्रमाण पत्र', labelEn: 'Income Certificate', days: '10 कार्य दिवस', fee: '₹20' },
+  { icon: '/i4.png', emoji: '🏷️', label: 'जाति प्रमाण पत्र', labelEn: 'Caste Certificate', days: '15 कार्य दिवस', fee: '₹20' },
+  { icon: '/i5.png', emoji: '🏠', label: 'निवास प्रमाण पत्र', labelEn: 'Residence Certificate', days: '10 कार्य दिवस', fee: '₹20' },
+  { icon: '/i6.png', emoji: '💍', label: 'विवाह पंजीकरण', labelEn: 'Marriage Registration', days: '15 कार्य दिवस', fee: '₹100' },
+  { icon: '/i7.png', emoji: '👴', label: 'पेंशन योजना', labelEn: 'Pension Schemes', days: '30 कार्य दिवस', fee: '₹0' },
+  { icon: null,      emoji: '🎓', label: 'शैक्षिक प्रमाण पत्र', labelEn: 'Educational Certificate', days: '7 कार्य दिवस', fee: '₹50' },
+  { icon: '/i8.png', emoji: '🌾', label: 'किसान पंजीकरण', labelEn: 'Farmer Registration', days: '5 कार्य दिवस', fee: '₹0' },
 ];
 
 const stats = [
@@ -49,14 +41,37 @@ export function PortalHome() {
   return (
     <div style={{ fontFamily: "'Noto Sans', 'Noto Sans Devanagari', sans-serif" }}>
 
-      {/* HERO BANNER — the लोक सेवा केंद्र image */}
-      <div className="w-full" style={{ maxHeight: '260px', overflow: 'hidden' }}>
+      {/* HERO BANNER with छत्तीसगढ़ ई-डिस्ट्रिक्ट branding overlay */}
+      <div className="w-full relative" style={{ maxHeight: '260px', overflow: 'hidden' }}>
         <img
           src={bannerImg}
           alt="लोक सेवा केंद्र - CSC Sahayak Banner"
           className="w-full object-cover object-center"
           style={{ width: '100%', display: 'block' }}
         />
+        {/* Branding overlay — छत्तीसगढ़ ई-डिस्ट्रिक्ट */}
+        <div
+          className="absolute top-4 left-4 flex items-center gap-3 px-4 py-2 rounded-lg shadow-md"
+          style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(4px)' }}
+        >
+          <img src="/cg.png" alt="CG Emblem" className="h-12 w-12 object-contain" />
+          <div>
+            <p
+              style={{
+                fontFamily: "'Noto Sans Devanagari', sans-serif",
+                fontSize: '18px',
+                fontWeight: 700,
+                color: '#1C2B4A',
+                lineHeight: 1.2,
+              }}
+            >
+              छत्तीसगढ़ ई-डिस्ट्रिक्ट
+            </p>
+            <p style={{ fontSize: '12px', color: '#5A6B85', fontWeight: 500 }}>
+              Chhattisgarh e-District Portal
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Stats Bar */}
@@ -122,25 +137,11 @@ export function PortalHome() {
                 >
                   <div className="flex items-start gap-3">
                     <div
-                      className="w-11 h-11 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform overflow-hidden"
-                      style={{ background: '#FFF0E0', fontSize: '24px' }}
+                      className="w-11 h-11 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform"
+                      style={{ background: '#FFF0E0', fontSize: '26px' }}
                     >
-                      {svc.labelEn === 'Birth Certificate' ? (
-                        <img src={birthCertIcon} alt="Birth Certificate" className="w-8 h-8 object-contain" />
-                      ) : svc.labelEn === 'Death Certificate' ? (
-                        <img src={deathCertIcon} alt="Death Certificate" className="w-8 h-8 object-contain" />
-                      ) : svc.labelEn === 'Marriage Registration' ? (
-                        <img src={marriageIcon} alt="Marriage Registration" className="w-8 h-8 object-contain" />
-                      ) : svc.labelEn === 'Residence Certificate' ? (
-                        <img src={residenceIcon} alt="Residence Certificate" className="w-8 h-8 object-contain" />
-                      ) : svc.labelEn === 'Farmer Registration' ? (
-                        <img src={farmerIcon} alt="Farmer Registration" className="w-8 h-8 object-contain" />
-                      ) : svc.labelEn === 'Pension Schemes' ? (
-                        <img src={pensionIcon} alt="Pension Schemes" className="w-8 h-8 object-contain" />
-                      ) : svc.labelEn === 'Income Certificate' ? (
-                        <img src={incomeIcon} alt="Income Certificate" className="w-8 h-8 object-contain" />
-                      ) : svc.labelEn === 'Caste Certificate' ? (
-                        <img src={casteIcon} alt="Caste Certificate" className="w-8 h-8 object-contain" />
+                      {svc.icon ? (
+                        <img src={svc.icon} alt={svc.labelEn} className="w-8 h-8 object-contain" />
                       ) : (
                         svc.emoji
                       )}
@@ -172,37 +173,6 @@ export function PortalHome() {
                 </Link>
               ))}
             </div>
-
-            {/* Quick Access Panel */}
-            <div className="mt-6 bg-white rounded-lg border p-5" style={{ borderColor: '#D8DDE8' }}>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-1.5 h-7 rounded" style={{ background: '#003380' }} />
-                <h3
-                  className="text-[#1C2B4A]"
-                  style={{ fontFamily: "'Baloo 2', sans-serif", fontSize: '17px', fontWeight: 700 }}
-                >
-                  CSC ऑपरेटर त्वरित पहुंच | Quick Access
-                </h3>
-              </div>
-              <div className="grid grid-cols-4 gap-4">
-                {[
-                  { icon: '🔐', label: 'ऑपरेटर लॉगिन', path: '/login', bg: '#003380' },
-                  { icon: '📊', label: 'डैशबोर्ड', path: '/app', bg: '#1A7A38' },
-                  { icon: '📝', label: 'नया आवेदन', path: '/login', bg: '#E8701A' },
-                  { icon: '📋', label: 'सेवाएं देखें', path: '/services', bg: '#7A8BA3' },
-                ].map((btn) => (
-                  <Link
-                    key={btn.label}
-                    to={btn.path}
-                    className="flex flex-col items-center gap-2 p-4 rounded-lg text-white text-center hover:opacity-90 transition-opacity"
-                    style={{ background: btn.bg }}
-                  >
-                    <span style={{ fontSize: '28px' }}>{btn.icon}</span>
-                    <span style={{ fontSize: '13px', fontWeight: 600 }}>{btn.label}</span>
-                  </Link>
-                ))}
-              </div>
-            </div>
           </div>
 
           {/* Right Column: Announcements & Links */}
@@ -213,7 +183,7 @@ export function PortalHome() {
                 className="flex items-center gap-2 px-4 py-3"
                 style={{ background: '#003380' }}
               >
-                <span className="text-yellow-400 text-lg">📢</span>
+                <span className="text-yellow-400 text-lg"></span>
                 <h3 className="text-white" style={{ fontSize: '15px', fontWeight: 600 }}>
                   नवीनतम सूचनाएं | Updates
                 </h3>
@@ -247,7 +217,7 @@ export function PortalHome() {
                 className="flex items-center gap-2 px-4 py-3"
                 style={{ background: '#1A7A38' }}
               >
-                <span className="text-yellow-400 text-lg">🔗</span>
+                <span className="text-yellow-400 text-lg"></span>
                 <h3 className="text-white" style={{ fontSize: '15px', fontWeight: 600 }}>
                   महत्वपूर्ण लिंक | Important Links
                 </h3>

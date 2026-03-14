@@ -282,9 +282,11 @@
         if (!res.ok) throw new Error("Backend not reachable");
         
         const data = await res.json();
-        if (!data.success || !data.applications || data.applications.length === 0) {
+        
+        // API returns { status: 'success', data: {...} } or { status: 'empty' }
+        if (data.status !== 'success' || !data.data) {
           addBotMessage(
-            "⚠️ कोई नया सिंक डेटा नहीं मिला। कृपया डेस्कटॉप ऐप में 'सिंक' बटन दबाएं।",
+            "\u26a0\ufe0f \u0915\u094b\u0908 \u0928\u092f\u093e \u0938\u093f\u0902\u0915 \u0921\u0947\u091f\u093e \u0928\u0939\u0940\u0902 \u092e\u093f\u0932\u093e\u0964 \u0915\u0943\u092a\u092f\u093e \u0921\u0947\u0938\u094d\u0915\u091f\u0949\u092a \u090f\u092a \u092e\u0947\u0902 '\u0938\u093f\u0902\u0915' \u092c\u091f\u0928 \u0926\u092c\u093e\u090f\u0902\u0964",
             "No new sync data found. Please press 'Sync' in the desktop app.",
             { error: true }
           );
@@ -292,39 +294,21 @@
           return;
         }
 
-        const appData = data.applications[0];
-        const fieldsJson = JSON.parse(appData.fields_json || "[]");
+        const appData = data.data;
+        const fieldsJson = JSON.parse(appData.data_json || appData.fields_json || "[]");
         
-        // Map the fields format from Desktop to the Extension format
-        // The extension format usually uses `sessionData.extractedData`
-        // [{ fieldKey: "dob", value: "...", confidence: 99 }, ...]
-        
-        const mappedData = fieldsJson.map(f => ({
-          fieldKey: f.fieldEn || f.field, // We might need to map this properly based on formMappings
-          value: f.extracted,
-          confidence: f.confidence,
-          label: f.fieldEn,
-          labelHi: f.field
-        }));
-
-        sessionData = sessionData || {};
-        sessionData.extractedData = mappedData;
-        sessionData.serviceName = appData.type;
-        sessionData.citizenName = appData.citizen_name;
-        saveSession();
-
         addBotMessage(
-          `✅ 1 आवेदन सिंक किया गया (${escapeHTML(appData.citizen_name)})।\nडेटा फॉर्म में भरा जा रहा है...`,
-          `✅ 1 application synced (${escapeHTML(appData.citizen_name)}).\nFilling form data...`
+          `\u2705 1 \u0906\u0935\u0947\u0926\u0928 \u0938\u093f\u0902\u0915 \u0915\u093f\u092f\u093e \u0917\u092f\u093e (${escapeHTML(appData.name || appData.citizen_name || '')}).\n\u0921\u0947\u091f\u093e \u092b\u0949\u0930\u094d\u092e \u092e\u0947\u0902 \u092d\u0930\u093e \u091c\u093e \u0930\u0939\u093e \u0939\u0948...`,
+          `1 application synced (${escapeHTML(appData.name || appData.citizen_name || '')}).\nFilling form data...`
         );
 
-        // Auto-fill form
+        // Send raw fields to content script - content.js handles the deep fuzzy mapping
         if (typeof chrome !== "undefined" && chrome.tabs) {
           chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             if (tabs[0]) {
               chrome.tabs.sendMessage(tabs[0].id, {
-                action: "AUTO_FILL_FORM",
-                data: mappedData
+                action: "FILL_FORM_DESKTOP",
+                data: fieldsJson
               });
             }
           });
@@ -332,6 +316,8 @@
 
         // Clear staged data on backend
         await fetch('http://127.0.0.1:5000/api/sync/clear', { method: 'POST' });
+
+        setTimeout(showLandingCard, 3000);
 
         // Go to review step
         setTimeout(() => showReviewData(mappedData), 2000);
