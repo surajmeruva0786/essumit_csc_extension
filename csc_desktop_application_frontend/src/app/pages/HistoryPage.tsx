@@ -1,18 +1,16 @@
-import React, { useState } from 'react';
-import { ChevronRight, Search, Filter, Download, Eye } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronRight, Search, Filter, Download, Eye, RefreshCw } from 'lucide-react';
 
-const allApplications = [
-  { id: 'REF2026031401', name: 'सुनीता देवी', service: 'जन्म प्रमाण पत्र', date: '14/03/2026', status: 'स्वीकृत', risk: 'Low', riskScore: 12 },
-  { id: 'REF2026031402', name: 'रामकुमार वर्मा', service: 'आय प्रमाण पत्र', date: '14/03/2026', status: 'प्रक्रियाधीन', risk: 'Medium', riskScore: 45 },
-  { id: 'REF2026031403', name: 'प्रीति साहू', service: 'जाति प्रमाण पत्र', date: '14/03/2026', status: 'स्वीकृत', risk: 'Low', riskScore: 18 },
-  { id: 'REF2026031404', name: 'महेश कुमार', service: 'निवास प्रमाण पत्र', date: '14/03/2026', status: 'अस्वीकृत', risk: 'High', riskScore: 82 },
-  { id: 'REF2026031405', name: 'दुर्गाबाई', service: 'विवाह पंजीकरण', date: '13/03/2026', status: 'प्रक्रियाधीन', risk: 'Low', riskScore: 22 },
-  { id: 'REF2026031406', name: 'लक्ष्मी नारायण', service: 'पेंशन योजना', date: '13/03/2026', status: 'स्वीकृत', risk: 'Low', riskScore: 8 },
-  { id: 'REF2026031407', name: 'विजय साहू', service: 'जन्म प्रमाण पत्र', date: '13/03/2026', status: 'स्वीकृत', risk: 'Low', riskScore: 15 },
-  { id: 'REF2026031408', name: 'गीता देवी', service: 'आय प्रमाण पत्र', date: '12/03/2026', status: 'अस्वीकृत', risk: 'High', riskScore: 76 },
-  { id: 'REF2026031409', name: 'रमेश यादव', service: 'जाति प्रमाण पत्र', date: '12/03/2026', status: 'स्वीकृत', risk: 'Medium', riskScore: 38 },
-  { id: 'REF2026031410', name: 'कमला बाई', service: 'निवास प्रमाण पत्र', date: '11/03/2026', status: 'प्रक्रियाधीन', risk: 'Low', riskScore: 25 },
-];
+interface ApplicationData {
+  id: string;
+  name: string;
+  service: string;
+  date: string;
+  status: string;
+  risk: string;
+  riskScore: number;
+  fields_json?: any;
+}
 
 const statusConfig: Record<string, { bg: string; color: string }> = {
   'स्वीकृत': { bg: '#E6F5EC', color: '#1A7A38' },
@@ -30,18 +28,68 @@ const services = ['सभी सेवाएं', 'जन्म प्रमा�
 const statuses = ['सभी स्थिति', 'स्वीकृत', 'प्रक्रियाधीन', 'अस्वीकृत'];
 
 export function HistoryPage() {
+  const [allApplications, setAllApplications] = useState<ApplicationData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+
   const [search, setSearch] = useState('');
   const [selectedService, setSelectedService] = useState('सभी सेवाएं');
   const [selectedStatus, setSelectedStatus] = useState('सभी स्थिति');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
-  const filtered = allApplications.filter((app) => {
+  useEffect(() => {
+    fetchApplications();
+  }, []);
+
+  const fetchApplications = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('http://127.0.0.1:5000/api/desktop/applications');
+      if (res.ok) {
+        const data = await res.json();
+        setAllApplications(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch applications', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSync = async (appId: string) => {
+    try {
+      setSyncingId(appId);
+      const res = await fetch('http://127.0.0.1:5000/api/sync/stage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ application_id: appId })
+      });
+      if (res.ok) {
+        // Find mapped URL if possible, otherwise default state portal
+        window.open('https://edistrict.cgstate.gov.in/PACE/login.do', '_blank');
+      } else {
+        alert('Failed to stage sync. Ensure local server is running.');
+      }
+    } catch (e) {
+      console.error('Sync failed', e);
+      alert('Network error during sync.');
+    } finally {
+      setSyncingId(null);
+    }
+  };
+
+  const filtered = allApplications.filter((app: ApplicationData) => {
     const matchSearch =
       app.name.toLowerCase().includes(search.toLowerCase()) ||
       app.id.toLowerCase().includes(search.toLowerCase());
     const matchService = selectedService === 'सभी सेवाएं' || app.service === selectedService;
     const matchStatus = selectedStatus === 'सभी स्थिति' || app.status === selectedStatus;
+    
+    // Simple date filter logic
+    if (dateFrom && new Date(app.date.split('/').reverse().join('-')) < new Date(dateFrom)) return false;
+    if (dateTo && new Date(app.date.split('/').reverse().join('-')) > new Date(dateTo)) return false;
+
     return matchSearch && matchService && matchStatus;
   });
 
@@ -75,19 +123,19 @@ export function HistoryPage() {
           { label: 'कुल', value: allApplications.length, color: '#003380', bg: '#EEF4FF' },
           {
             label: 'स्वीकृत',
-            value: allApplications.filter((a) => a.status === 'स्वीकृत').length,
+            value: allApplications.filter((a: ApplicationData) => a.status === 'स्वीकृत').length,
             color: '#1A7A38',
             bg: '#E6F5EC',
           },
           {
             label: 'प्रक्रियाधीन',
-            value: allApplications.filter((a) => a.status === 'प्रक्रियाधीन').length,
+            value: allApplications.filter((a: ApplicationData) => a.status === 'प्रक्रियाधीन').length,
             color: '#E8701A',
             bg: '#FFF0E0',
           },
           {
             label: 'अस्वीकृत',
-            value: allApplications.filter((a) => a.status === 'अस्वीकृत').length,
+            value: allApplications.filter((a: ApplicationData) => a.status === 'अस्वीकृत').length,
             color: '#D93025',
             bg: '#FEECEC',
           },
@@ -206,7 +254,7 @@ export function HistoryPage() {
                   </td>
                 </tr>
               ) : (
-                filtered.map((app, i) => (
+                filtered.map((app: ApplicationData, i: number) => (
                   <tr
                     key={app.id}
                     className="hover:bg-gray-50 transition-colors"
@@ -273,13 +321,30 @@ export function HistoryPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3.5">
-                      <button
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all hover:bg-blue-50"
-                        style={{ borderColor: '#003380', color: '#003380', fontSize: '12px' }}
-                      >
-                        <Eye size={13} />
-                        देखें
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all hover:bg-blue-50"
+                          style={{ borderColor: '#003380', color: '#003380', fontSize: '12px' }}
+                        >
+                          <Eye size={13} />
+                          देखें
+                        </button>
+                        <button
+                          onClick={() => handleSync(app.id)}
+                          disabled={syncingId === app.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all"
+                          style={{ 
+                            background: syncingId === app.id ? '#ccc' : '#E8701A', 
+                            color: 'white', 
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            cursor: syncingId === app.id ? 'wait' : 'pointer'
+                          }}
+                        >
+                          <RefreshCw size={12} className={syncingId === app.id ? "animate-spin" : ""} />
+                          {syncingId === app.id ? 'सिंक हो रहा है...' : 'सिंक (Sync)'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

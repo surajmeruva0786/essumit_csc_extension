@@ -14,24 +14,63 @@ interface UploadedFile {
   name: string;
   size: string;
   progress: number;
+  jobId?: string;
 }
 
 export function DocumentUploadPage() {
   const navigate = useNavigate();
   const [uploaded, setUploaded] = useState<Record<string, UploadedFile>>({});
   const [uploading, setUploading] = useState<string | null>(null);
+  const [manualCheck, setManualCheck] = useState<Record<string, boolean>>({});
 
-  const handleUpload = async (docId: string) => {
-    setUploading(docId);
-    // Simulate upload
-    for (let p = 0; p <= 100; p += 20) {
-      await new Promise((r) => setTimeout(r, 150));
-      setUploaded((prev) => ({
-        ...prev,
-        [docId]: { name: `document_${docId}.pdf`, size: '1.2 MB', progress: p },
-      }));
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [activeDocId, setActiveDocId] = useState<string | null>(null);
+
+  const triggerFileInput = (docId: string) => {
+    setActiveDocId(docId);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !activeDocId) return;
+
+    setUploading(activeDocId);
+    
+    // Simulate progress while uploading
+    setUploaded((prev) => ({
+      ...prev,
+      [activeDocId]: { name: file.name, size: `${(file.size / 1024 / 1024).toFixed(2)} MB`, progress: 30 },
+    }));
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('http://127.0.0.1:5000/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setUploaded((prev) => ({
+          ...prev,
+          [activeDocId]: { ...prev[activeDocId], progress: 100, jobId: data.job_id },
+        }));
+      } else {
+         alert("Upload failed. Is the local Python server running?");
+         removeFile(activeDocId);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Network error during upload.");
+      removeFile(activeDocId);
+    } finally {
+      setUploading(null);
+      setActiveDocId(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
-    setUploading(null);
   };
 
   const removeFile = (docId: string) => {
@@ -44,13 +83,20 @@ export function DocumentUploadPage() {
 
   const requiredUploaded = requiredDocs
     .filter((d) => d.required)
-    .every((d) => uploaded[d.id]?.progress === 100);
+    .every((d) => uploaded[d.id]?.progress === 100 || manualCheck[d.id]);
 
-  const totalUploaded = Object.values(uploaded).filter((f) => f.progress === 100).length;
-  const totalProgress = Math.round((totalUploaded / requiredDocs.length) * 100);
+  const totalProcessed = requiredDocs.filter((d) => uploaded[d.id]?.progress === 100 || manualCheck[d.id]).length;
+  const totalProgress = Math.round((totalProcessed / requiredDocs.length) * 100);
 
   return (
     <div className="p-6" style={{ fontFamily: "'Noto Sans', 'Noto Sans Devanagari', sans-serif" }}>
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleFileChange} 
+        className="hidden" 
+        accept=".pdf,.jpg,.jpeg,.png"
+      />
       {/* Header */}
       <div className="mb-5">
         <div className="flex items-center gap-2 text-[#7A8BA3] mb-1" style={{ fontSize: '13px' }}>
@@ -83,7 +129,7 @@ export function DocumentUploadPage() {
                   color: '#1A7A38',
                 }}
               >
-                {totalUploaded}/{requiredDocs.length}
+                {totalProcessed}/{requiredDocs.length}
               </span>
             </div>
             <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
@@ -96,7 +142,7 @@ export function DocumentUploadPage() {
               />
             </div>
             <p className="text-[#7A8BA3] mt-1" style={{ fontSize: '12px' }}>
-              {totalProgress}% complete • {requiredDocs.length - totalUploaded} documents remaining
+              {totalProgress}% complete • {requiredDocs.length - totalProcessed} documents remaining
             </p>
           </div>
 
@@ -112,10 +158,11 @@ export function DocumentUploadPage() {
               </p>
             </div>
 
-            <div className="divide-y" style={{ divideColor: '#EEF1F7' }}>
+            <div className="divide-y" style={{ borderColor: '#EEF1F7' }}>
               {requiredDocs.map((doc) => {
                 const file = uploaded[doc.id];
                 const isUploaded = file?.progress === 100;
+                const isProcessed = isUploaded || manualCheck[doc.id];
                 const isUploading = uploading === doc.id;
 
                 return (
@@ -123,13 +170,14 @@ export function DocumentUploadPage() {
                     <div className="flex items-start gap-4">
                       {/* Checkbox */}
                       <div
-                        className="w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5"
+                        onClick={() => setManualCheck(prev => ({...prev, [doc.id]: !prev[doc.id]}))}
+                        className="w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 cursor-pointer transition-colors"
                         style={{
-                          borderColor: isUploaded ? '#1A7A38' : '#D8DDE8',
-                          background: isUploaded ? '#1A7A38' : 'white',
+                          borderColor: isProcessed ? '#1A7A38' : '#D8DDE8',
+                          background: isProcessed ? '#1A7A38' : 'white',
                         }}
                       >
-                        {isUploaded && <span className="text-white" style={{ fontSize: '12px' }}>✓</span>}
+                        {isProcessed && <span className="text-white" style={{ fontSize: '12px' }}>✓</span>}
                       </div>
 
                       {/* Doc Info */}
@@ -207,7 +255,7 @@ export function DocumentUploadPage() {
                       {/* Upload Button */}
                       {!isUploaded && (
                         <button
-                          onClick={() => handleUpload(doc.id)}
+                          onClick={() => triggerFileInput(doc.id)}
                           disabled={isUploading}
                           className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-white transition-all hover:opacity-90 disabled:opacity-60 flex-shrink-0"
                           style={{
@@ -228,8 +276,13 @@ export function DocumentUploadPage() {
 
           {/* Continue Button */}
           <button
-            onClick={() => navigate('/app/extraction')}
-            disabled={!requiredUploaded}
+            onClick={() => {
+              const jobIds = Object.values(uploaded)
+                .filter(u => u.jobId)
+                .map(u => u.jobId);
+              navigate('/app/extraction', { state: { jobIds } });
+            }}
+            disabled={!requiredUploaded || totalProcessed === 0}
             className="w-full py-4 rounded-xl text-white transition-all"
             style={{
               background: requiredUploaded

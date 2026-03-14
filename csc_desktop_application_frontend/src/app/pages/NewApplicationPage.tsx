@@ -1,14 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ChevronRight, User, Phone, MapPin, MessageCircle, Send, Bot, CheckCircle } from 'lucide-react';
-import birthCertIcon from 'figma:asset/54e1443fe5df891a15413b1e4aebff6d95eb3718.png';
-import deathCertIcon from 'figma:asset/8a9e6b29ede8826a773fb0dcb8e6617fa6302457.png';
-import marriageIcon from 'figma:asset/d0b779d5d6795ed76654bb091d1f6d9cca41fc8c.png';
-import residenceIcon from 'figma:asset/a44e4ce4c6fe33679a557ce2f665dd9bed65c373.png';
-import farmerIcon from 'figma:asset/be2ab8d5eb8679c506a9c0dc9c2cfb72cb32949e.png';
-import pensionIcon from 'figma:asset/3d7d71e3c8d6321c827a3e90a846fe61ddcd1802.png';
-import incomeIcon from 'figma:asset/d822c91fd76f62163d7c031b8d1d1fb2f4af683a.png';
-import casteIcon from 'figma:asset/56f9c4775c575ee990502a6775ddb39c1d3cc8de.png';
+// Icons removed
 
 const services = [
   { id: 'birth', emoji: '👶', label: 'जन्म प्रमाण पत्र', labelEn: 'Birth Certificate', docs: 3, days: '7' },
@@ -206,21 +199,21 @@ export function NewApplicationPage() {
                   >
                     <div className="flex items-center justify-between mb-2">
                       {svc.id === 'birth' ? (
-                        <img src={birthCertIcon} alt="Birth Certificate" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
+                        <img src="/i1.png" alt="Birth Certificate" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
                       ) : svc.id === 'death' ? (
-                        <img src={deathCertIcon} alt="Death Certificate" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
-                      ) : svc.id === 'marriage' ? (
-                        <img src={marriageIcon} alt="Marriage Registration" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
-                      ) : svc.id === 'residence' ? (
-                        <img src={residenceIcon} alt="Residence Certificate" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
-                      ) : svc.id === 'farmer' ? (
-                        <img src={farmerIcon} alt="Farmer Registration" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
-                      ) : svc.id === 'pension' ? (
-                        <img src={pensionIcon} alt="Pension Schemes" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
+                        <img src="/i2.png" alt="Death Certificate" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
                       ) : svc.id === 'income' ? (
-                        <img src={incomeIcon} alt="Income Certificate" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
+                        <img src="/i3.png" alt="Income Certificate" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
                       ) : svc.id === 'caste' ? (
-                        <img src={casteIcon} alt="Caste Certificate" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
+                        <img src="/i4.png" alt="Caste Certificate" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
+                      ) : svc.id === 'residence' ? (
+                        <img src="/i5.png" alt="Residence Certificate" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
+                      ) : svc.id === 'marriage' ? (
+                        <img src="/i6.png" alt="Marriage Registration" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
+                      ) : svc.id === 'farmer' ? (
+                        <img src="/i7.png" alt="Farmer Registration" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
+                      ) : svc.id === 'pension' ? (
+                        <img src="/i8.png" alt="Pension Schemes" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
                       ) : (
                         <span style={{ fontSize: '30px' }}>{svc.emoji}</span>
                       )}

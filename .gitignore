@@ -2,3 +2,5 @@ extension_frontend/dist
 extension_frontend/node_modules
 csc_extension_dashboard_frontend/node_modules
 csc_extension_dashboard_frontend/dist
+csc_desktop_application_frontend/dist
+csc_desktop_application_frontend/node_modules

@@ -12,7 +12,11 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import threading
+import requests
 from typing import Dict, List
+
+# Local DB for Desktop App Offline Storage
+import local_db
 
 # Import patent pipeline modules
 from patent_ocr_pipeline import process_document_with_patent_pipeline, extract_text_with_confidence_pipeline
@@ -132,6 +136,68 @@ def process_job_async(job_id: str, file_path: str, fields: List[str], pipeline: 
             
             elapsed = time.time() - start_time
             print(f"Patent pipeline completed for job {job_id} in {elapsed:.2f}s")
+            
+        elif pipeline == 'ollama':
+            print(f"Starting OLLAMA local pipeline for job {job_id}...")
+            jobs[job_id]['current_stage'] = 1
+            
+            # 1. Extract raw text from image/PDF
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext == '.pdf':
+                from gemini_ocr_extract import extract_text_from_pdf
+                text = extract_text_from_pdf(file_path)
+            else:
+                from gemini_ocr_extract import extract_text_from_image
+                text = extract_text_from_image(file_path)
+                
+            jobs[job_id]['current_stage'] = 2
+            
+            # 2. Query Local Ollama API (Llama3.2)
+            try:
+                system_prompt = "You are a data extraction assistant. Extract the requested fields from the OCR text. Return ONLY a pure JSON object, no markdown."
+                user_prompt = f"Extract these fields: {', '.join(fields)}\n\nText:\n{text}"
+                
+                response = requests.post('http://127.0.0.1:11434/api/generate', json={
+                    "model": "llama3.2:latest",
+                    "prompt": f"{system_prompt}\n\n{user_prompt}",
+                    "stream": False,
+                    "format": "json",
+                }, timeout=120)
+                response.raise_for_status()
+                
+                try:
+                    llm_json = json.loads(response.json()['response'])
+                    # Format to match Groq output structure expected by frontend
+                    extracted_data = {}
+                    for field, value in llm_json.items():
+                        extracted_data[field] = {
+                            "value": str(value),
+                            "confidence": 0.95
+                        }
+                except Exception as parse_e:
+                    print(f"Ollama JSON parse error: {parse_e}")
+                    extracted_data = {"error": {"value": str(parse_e), "confidence": 0}}
+                    
+            except requests.exceptions.RequestException as req_e:
+                print(f"Ollama connection error (Is Ollama running?): {req_e}")
+                jobs[job_id]['warning'] = 'Ollama connection failed, falling back to Groq.'
+                # Fallback to standard Groq if Ollama is not actually running
+                from gemini_ocr_extract import extract_fields_with_groq
+                extracted_data = extract_fields_with_groq(text, fields)
+
+            # Save results
+            result_path = os.path.join(RESULTS_FOLDER, f"{job_id}_results.json")
+            with open(result_path, 'w', encoding='utf-8') as f:
+                json.dump({
+                    'job_id': job_id,
+                    'pipeline': 'ollama',
+                    'timestamp': datetime.now().isoformat(),
+                    'results': extracted_data
+                }, f, indent=2)
+                
+            jobs[job_id]['status'] = 'complete'
+            jobs[job_id]['current_stage'] = 2
+            jobs[job_id]['results'] = extracted_data
             
         else:
             # Standard pipeline
@@ -375,6 +441,127 @@ def health_check():
         'active_jobs': len([j for j in jobs.values() if j['status'] == 'processing'])
     })
 
+@app.route('/api/validate_field', methods=['POST'])
+def validate_field():
+    """Validate a single extracted field using local Ollama and the Knowledge Base"""
+    data = request.json
+    field_name = data.get('field_name', '')
+    field_value = data.get('field_value', '')
+    
+    if not field_name or not field_value:
+        return jsonify({'valid': True, 'reason': 'Value missing.'})
+        
+    try:
+        # Load Knowledge Base
+        kb_path = os.path.join(BASE_DIR, "..", "knowledge_base", "csc_kb1.json")
+        kb_str = ""
+        if os.path.exists(kb_path):
+            with open(kb_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                try:
+                    kb_data = json.loads(content)
+                except Exception:
+                    import ast
+                    kb_data = ast.literal_eval(content)
+                kb_str = json.dumps(kb_data)[:3000] # Limit context size
+                
+        system_prompt = """You are a helpful AI validation assistant for evaluating extracted form data.
+INSTRUCTIONS:
+You must determine if the "Extracted Value" logically matches the "Field Name". 
+
+GUIDELINES:
+- 'Aadhaar' / 'आधार संख्या': Valid ONLY IF it is exactly 12 digits. If it contains letters (like 'CGX' or 'BPL'), it is INVALID (likely a Voter ID or BPL number).
+- 'PIN Code' / 'पिन कोड': Valid ONLY IF exactly 6 digits.
+- 'Address' / 'पता': Valid ONLY IF it contains text/words. If it is ONLY a 6-digit number, it is INVALID.
+- 'Name' / 'नाम' / 'Caste' / 'Date of Birth' etc.: Valid as long as it looks like a reasonable value for that field.
+
+OUTPUT FORMAT:
+If the value matches the field type and rules, you MUST output: {"valid": true, "reason": "यह जानकारी सही प्रतीत होती है।"}
+If the value clearly breaks a rule or is clearly mismatched, output: {"valid": false, "reason": "Your explanation in Hindi"}
+Reply with valid JSON dictionary ONLY."""
+        
+        user_prompt = f"Field Name: {field_name}\nExtracted Value: {field_value}\n\nValidate the extracted value. Output ONLY valid JSON containing 'valid' (boolean) and 'reason' (string)."
+        
+        response = requests.post('http://127.0.0.1:11434/api/generate', json={
+            "model": "llama3.2:latest",
+            "prompt": f"{system_prompt}\n\n{user_prompt}",
+            "stream": False,
+            "format": "json",
+        }, timeout=30)
+        
+        if response.ok:
+            result_text = response.json()['response'].strip()
+            # Clean markdown if present
+            if result_text.startswith('```json'):
+                result_text = result_text[7:].strip()
+            if result_text.endswith('```'):
+                result_text = result_text[:-3].strip()
+            try:
+                result = json.loads(result_text)
+                return jsonify(result)
+            except Exception as e:
+                print(f"Ollama JSON decode error: {e}")
+                return jsonify({'valid': True, 'reason': 'Error parsing AI response'})
+        else:
+            return jsonify({'valid': True, 'reason': 'AI Validation failed'})
+            
+    except Exception as e:
+        print(f"Validation error: {e}")
+        return jsonify({'valid': True, 'reason': 'AI Assistant unavailable.'})
+
+# ==========================================
+# Desktop Application / Sync APIs
+# ==========================================
+
+@app.route('/api/desktop/applications', methods=['GET', 'POST'])
+def handle_applications():
+    if request.method == 'POST':
+        app_data = request.json
+        if not app_data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        # Save to SQLite
+        try:
+           app_id = local_db.save_application(app_data)
+           return jsonify({'status': 'success', 'id': app_id})
+        except Exception as e:
+           return jsonify({'error': str(e)}), 500
+    
+    # GET method
+    try:
+        apps = local_db.get_all_applications()
+        return jsonify(apps)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/sync/stage', methods=['POST'])
+def sync_stage():
+    data = request.json
+    app_id = data.get('application_id')
+    if not app_id:
+        return jsonify({'error': 'Application ID required'}), 400
+        
+    print(f"[SYNC] Staging Application ID {app_id} for Chrome Extension...")
+    success = local_db.stage_application_for_sync(app_id)
+    if success:
+        return jsonify({'status': 'success', 'message': f'Application {app_id} staged.'})
+    else:
+        return jsonify({'error': 'Application not found'}), 404
+
+@app.route('/api/sync/get_staged', methods=['GET'])
+def get_staged_sync():
+    print("[SYNC] Chrome Extension is requesting staged application data...")
+    staged_data = local_db.get_staged_sync()
+    if staged_data:
+        return jsonify({'status': 'success', 'data': staged_data})
+    else:
+        return jsonify({'status': 'empty', 'message': 'No application staged for sync.'}), 200
+
+@app.route('/api/sync/clear', methods=['POST'])
+def clear_staged_sync():
+    local_db.clear_staged_sync()
+    return jsonify({'status': 'success', 'message': 'Staged data cleared.'})
+
 if __name__ == '__main__':
     print("=" * 80)
     print("🚀 FileTract Backend API - Patent-Eligible OCR Pipeline")
@@ -383,6 +570,13 @@ if __name__ == '__main__':
     # Get port from environment variable (Render sets this)
     port = int(os.environ.get('PORT', 5000))
     
+    # Initialize Local SQLite DB
+    try:
+        local_db.init_db()
+        print("✅ Local SQLite Database Initialized.")
+    except Exception as e:
+        print(f"❌ Failed to init local_db: {e}")
+
     # Use debug=False in production
     debug = os.environ.get('FLASK_ENV') != 'production'
     

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Eye, EyeOff, Shield, Lock, User } from 'lucide-react';
 import { AshokChakra } from '../components/AshokChakra';
-import bannerImg from 'figma:asset/ff09e3e590edd9910d68b0496ed82e2fbc7fddf3.png';
+const bannerImg = '/slider8.jpg.jpeg';
 
 export function LoginPage() {
   const navigate = useNavigate();

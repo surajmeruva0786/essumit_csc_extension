@@ -482,7 +482,7 @@ export function CitizenRecordsPage() {
           <table className="w-full">
             <thead>
               <tr style={{ background: NAVY }}>
-                {[
+                {([
                   { label: '#',            key: null,          w: '44px'  },
                   { label: 'नागरिक',       key: 'name',        w: 'auto'  },
                   { label: 'नागरिक ID',    key: null,          w: '150px' },
@@ -492,7 +492,7 @@ export function CitizenRecordsPage() {
                   { label: 'अंतिम सेवा',  key: null,          w: '170px' },
                   { label: 'जोखिम स्तर',  key: 'riskScore',   w: '120px' },
                   { label: 'क्रिया',       key: null,          w: '80px'  },
-                ] as { label: string; key: string | null; w: string }[].map(col => (
+                ] as { label: string; key: string | null; w: string }[]).map(col => (
                   <th
                     key={col.label}
                     className="px-4 py-3 text-left"

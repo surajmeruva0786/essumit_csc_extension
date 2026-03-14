@@ -242,6 +242,13 @@
             <span class="btn-desc">AI Assistant</span>
           </span>
         </button>
+        <button class="btn btn-secondary" id="btnSync" style="margin-top: 8px; border-color: #2E9E50; color: #1A7A38;">
+          <span class="btn-icon">🔄</span>
+          <span class="btn-content">
+            <span class="btn-label">ऑफ़लाइन ऐप सिंक करें</span>
+            <span class="btn-desc">Sync Offline App</span>
+          </span>
+        </button>
       </div>
     `;
     chatContainer.appendChild(card);
@@ -249,10 +256,96 @@
     const btnAI = card.querySelector("#btnAI");
     const btnApply = card.querySelector("#btnApply");
     const btnAssist = card.querySelector("#btnAssist");
+    const btnSync = card.querySelector("#btnSync");
 
     if (btnAI) btnAI.addEventListener("click", () => startChatFlow("ai"));
     if (btnApply) btnApply.addEventListener("click", () => startChatFlow("apply"));
     if (btnAssist) btnAssist.addEventListener("click", () => startChatFlow("assist"));
+    if (btnSync) btnSync.addEventListener("click", () => handleOfflineSync());
+  }
+
+  // ─── Offline Sync Handler ──────────────────────────────────
+  async function handleOfflineSync() {
+    chatContainer.innerHTML = "";
+    inputArea.classList.add("hidden");
+    headerSubtitle.textContent = "ऑफ़लाइन सिंक";
+    headerBadge.textContent = "सिंक";
+
+    showTypingThen(async () => {
+      addBotMessage(
+        "🔄 ऑफ़लाइन डेस्कटॉप ऐप से डेटा सिंक किया जा रहा है...",
+        "Syncing data from offline desktop app..."
+      );
+
+      try {
+        const res = await fetch('http://127.0.0.1:5000/api/sync/get_staged');
+        if (!res.ok) throw new Error("Backend not reachable");
+        
+        const data = await res.json();
+        if (!data.success || !data.applications || data.applications.length === 0) {
+          addBotMessage(
+            "⚠️ कोई नया सिंक डेटा नहीं मिला। कृपया डेस्कटॉप ऐप में 'सिंक' बटन दबाएं।",
+            "No new sync data found. Please press 'Sync' in the desktop app.",
+            { error: true }
+          );
+          setTimeout(showLandingCard, 3000);
+          return;
+        }
+
+        const appData = data.applications[0];
+        const fieldsJson = JSON.parse(appData.fields_json || "[]");
+        
+        // Map the fields format from Desktop to the Extension format
+        // The extension format usually uses `sessionData.extractedData`
+        // [{ fieldKey: "dob", value: "...", confidence: 99 }, ...]
+        
+        const mappedData = fieldsJson.map(f => ({
+          fieldKey: f.fieldEn || f.field, // We might need to map this properly based on formMappings
+          value: f.extracted,
+          confidence: f.confidence,
+          label: f.fieldEn,
+          labelHi: f.field
+        }));
+
+        sessionData = sessionData || {};
+        sessionData.extractedData = mappedData;
+        sessionData.serviceName = appData.type;
+        sessionData.citizenName = appData.citizen_name;
+        saveSession();
+
+        addBotMessage(
+          `✅ 1 आवेदन सिंक किया गया (${escapeHTML(appData.citizen_name)})।\nडेटा फॉर्म में भरा जा रहा है...`,
+          `✅ 1 application synced (${escapeHTML(appData.citizen_name)}).\nFilling form data...`
+        );
+
+        // Auto-fill form
+        if (typeof chrome !== "undefined" && chrome.tabs) {
+          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (tabs[0]) {
+              chrome.tabs.sendMessage(tabs[0].id, {
+                action: "AUTO_FILL_FORM",
+                data: mappedData
+              });
+            }
+          });
+        }
+
+        // Clear staged data on backend
+        await fetch('http://127.0.0.1:5000/api/sync/clear', { method: 'POST' });
+
+        // Go to review step
+        setTimeout(() => showReviewData(mappedData), 2000);
+
+      } catch (e) {
+        console.error("Sync Error:", e);
+        addBotMessage(
+          "❌ डेस्कटॉप ऐप से कनेक्ट नहीं हो सका। सुनिश्चित करें कि ऐप चल रहा है।",
+          "Could not connect to Desktop app. Make sure it is running.",
+          { error: true }
+        );
+        setTimeout(showLandingCard, 3000);
+      }
+    });
   }
 
   // ═══════════════════════════════════════════════════════════

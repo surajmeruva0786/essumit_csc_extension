@@ -1,8 +1,14 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router';
-import { ChevronRight, AlertTriangle, Edit2, Check, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router';
+import { ChevronRight, AlertTriangle, Edit2, Check, X, Loader2, ShieldCheck, ShieldAlert } from 'lucide-react';
 
 type Confidence = 'high' | 'medium' | 'low';
+
+interface ValidationResult {
+  valid: boolean;
+  reason: string | null;
+  isLoading: boolean;
+}
 
 interface Field {
   field: string;
@@ -36,9 +42,79 @@ const confidenceConfig: Record<Confidence, { color: string; bg: string; label: s
 
 export function DataReviewPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [data, setData] = useState<Field[]>(extractedData);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [validations, setValidations] = useState<Record<string, ValidationResult>>({});
+
+  const validateField = async (fieldEn: string, field: string, extractedValue: string) => {
+    setValidations(prev => ({ ...prev, [fieldEn]: { valid: true, reason: null, isLoading: true } }));
+    try {
+      const res = await fetch('http://127.0.0.1:5000/api/validate_field', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field_name: field, field_value: extractedValue })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setValidations(prev => ({ ...prev, [fieldEn]: { valid: data.valid, reason: data.reason, isLoading: false } }));
+      } else {
+        setValidations(prev => ({ ...prev, [fieldEn]: { valid: true, reason: 'Validation request failed.', isLoading: false } }));
+      }
+    } catch (e) {
+      setValidations(prev => ({ ...prev, [fieldEn]: { valid: true, reason: 'Network error.', isLoading: false } }));
+    }
+  };
+
+  useEffect(() => {
+    if (location.state?.results) {
+      const results = location.state.results;
+      let mappedData: Field[] = [];
+
+      if (Array.isArray(results)) {
+        mappedData = results.map((r: any) => ({
+          field: r.field || 'अज्ञात',
+          fieldEn: r.field || 'Unknown',
+          extracted: r.extracted || '',
+          confidence: r.confidence || 0,
+          level: (r.confidence || 0) >= 85 ? 'high' : (r.confidence || 0) >= 70 ? 'medium' : 'low',
+          editable: true
+        }));
+      } else if (typeof results === 'object' && results !== null) {
+        // Handle dictionary like { "Applicant Name": { "value": "John", "confidence": 0.95 } }
+        mappedData = Object.entries(results).map(([key, val]: [string, any]) => {
+          let extracted = '';
+          let conf = 0;
+          if (typeof val === 'object' && val !== null) {
+            extracted = val.value || val.extracted || '';
+            conf = val.confidence || val.ocr_confidence || 0;
+            if (conf <= 1 && conf > 0) conf = Math.round(conf * 100);
+          } else {
+            extracted = String(val);
+            conf = 95;
+          }
+          let level: Confidence = conf >= 85 ? 'high' : conf >= 70 ? 'medium' : 'low';
+          return {
+            field: key,
+            fieldEn: key,
+            extracted: extracted,
+            confidence: conf,
+            level: level,
+            editable: true
+          };
+        });
+      }
+      setData(mappedData);
+      
+      // Auto-validate mapped fields
+      mappedData.forEach(f => {
+        if (f.extracted) {
+          validateField(f.fieldEn, f.field, f.extracted);
+        }
+      });
+    }
+  }, [location.state]);
 
   const startEdit = (field: Field) => {
     setEditingId(field.fieldEn);
@@ -54,6 +130,10 @@ export function DataReviewPage() {
       )
     );
     setEditingId(null);
+    const field = data.find(f => f.fieldEn === fieldEn);
+    if (field) {
+      validateField(fieldEn, field.field, editValue);
+    }
   };
 
   const lowConfidenceCount = data.filter((f) => f.level === 'low').length;
@@ -136,7 +216,7 @@ export function DataReviewPage() {
             <table className="w-full">
               <thead>
                 <tr style={{ background: '#EEF1F7' }}>
-                  {['फ़ील्ड नाम', 'निकाला गया मान', 'विश्वास स्कोर', 'क्रिया'].map((h) => (
+                  {['फ़ील्ड नाम', 'निकाला गया मान', 'AI सत्यापन', 'विश्वास स्कोर', 'क्रिया'].map((h) => (
                     <th
                       key={h}
                       className="px-5 py-2.5 text-left text-[#7A8BA3] border-b"
@@ -178,6 +258,35 @@ export function DataReviewPage() {
                             {field.extracted}
                           </p>
                         )}
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-1.5">
+                          {validations[field.fieldEn]?.isLoading ? (
+                            <>
+                              <Loader2 className="animate-spin text-blue-500" size={14} />
+                              <span className="text-blue-500" style={{ fontSize: '11px', fontWeight: 600 }}>जांच हो रही है...</span>
+                            </>
+                          ) : validations[field.fieldEn] ? (
+                            validations[field.fieldEn].valid ? (
+                              <>
+                                <ShieldCheck className="text-green-600" size={16} />
+                                <span className="text-green-700" style={{ fontSize: '12px', fontWeight: 600 }}>सत्यापित</span>
+                              </>
+                            ) : (
+                              <div className="group relative flex items-center gap-1 cursor-help">
+                                <ShieldAlert className="text-red-500" size={16} />
+                                <span className="text-red-600" style={{ fontSize: '12px', fontWeight: 600 }}>अमान्य</span>
+                                {validations[field.fieldEn].reason && (
+                                  <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded p-2 z-10 w-48 shadow-lg">
+                                    {validations[field.fieldEn].reason}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          ) : (
+                            <span className="text-gray-400" style={{ fontSize: '12px' }}>—</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-2">
@@ -242,14 +351,14 @@ export function DataReviewPage() {
           {/* Action Buttons */}
           <div className="flex gap-3">
             <button
-              onClick={() => navigate('/app/validation')}
+              onClick={() => navigate('/app/validation', { state: { reviewData: data } })}
               className="flex-1 py-3.5 rounded-xl text-white transition-all hover:opacity-90"
               style={{ background: 'linear-gradient(135deg, #FF9933, #E8701A)', fontSize: '15px', fontWeight: 700 }}
             >
               फॉर्म ऑटो-फिल करें → Auto-fill Form
             </button>
             <button
-              onClick={() => navigate('/app/validation')}
+              onClick={() => navigate('/app/validation', { state: { reviewData: data } })}
               className="px-6 py-3.5 rounded-xl border transition-all hover:bg-gray-50"
               style={{ borderColor: '#D8DDE8', color: '#3D4F6B', fontSize: '14px' }}
             >

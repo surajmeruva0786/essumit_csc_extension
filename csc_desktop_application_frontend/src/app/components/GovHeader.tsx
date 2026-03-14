@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router';
 import { AshokChakra } from './AshokChakra';
-import cgLogo from 'figma:asset/fb7c2f20fe22b2a0dd3cc0dea307292c83aeff93.png';
 
 const navItems = [
   { label: 'मुख्य पृष्ठ', labelEn: 'Home', path: '/' },
@@ -76,7 +75,7 @@ export function GovHeader({ isLoggedIn = false, operatorName = 'राजेश 
           {/* Left: CG Logo */}
           <Link to="/" className="flex-1 flex items-center gap-4">
             <img
-              src={cgLogo}
+              src="/cg.png"
               alt="Chhattisgarh e-District"
               className="h-24 object-contain"
             />

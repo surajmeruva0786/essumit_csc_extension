@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useLocation } from 'react-router';
 import { ChevronRight, AlertTriangle, XCircle, CheckCircle, Info, Check, X } from 'lucide-react';
 import { AshokChakra } from '../components/AshokChakra';
 
@@ -55,7 +55,45 @@ const riskScore = 72;
 
 export function ValidationPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [confirming, setConfirming] = useState(false);
+  
+  const reviewData = location.state?.reviewData || [];
+
+  const handleFinalSubmit = async (status: string) => {
+    setConfirming(true);
+    
+    try {
+      // Find applicant name from data
+      const nameField = reviewData.find((f: any) => f.field === 'आवेदक का नाम' || f.fieldEn === 'Applicant Name');
+      const applicantName = nameField ? nameField.extracted : 'अज्ञात (Unknown)';
+      
+      const payload = {
+        id: `APP-${Math.floor(1000 + Math.random() * 9000)}`,
+        name: applicantName,
+        type: 'जन्म प्रमाण पत्र',
+        date: new Date().toISOString().split('T')[0],
+        status: status,
+        data_json: JSON.stringify(reviewData)
+      };
+
+      const res = await fetch('http://127.0.0.1:5000/api/desktop/applications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error("Failed to save to SQLite");
+
+      setTimeout(() => navigate('/app/success'), 1500);
+    } catch (e) {
+      console.error(e);
+      alert("Error saving data. Make sure Python backend is running.");
+      setConfirming(false);
+    }
+  };
 
   const riskLevel = riskScore >= 70 ? 'high' : riskScore >= 40 ? 'medium' : 'low';
   const riskLabels: Record<string, { label: string; labelEn: string; color: string }> = {
@@ -212,10 +250,7 @@ export function ValidationPage() {
               आवेदन रद्द करें | Cancel Application
             </button>
             <button
-              onClick={() => {
-                setConfirming(true);
-                setTimeout(() => navigate('/app/success'), 1500);
-              }}
+              onClick={() => handleFinalSubmit('प्रक्रियाधीन')}
               disabled={confirming}
               className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl text-white transition-all hover:opacity-90"
               style={{ background: 'linear-gradient(135deg, #E8A020, #C87818)', fontSize: '15px', fontWeight: 700 }}
@@ -227,10 +262,7 @@ export function ValidationPage() {
               )}
             </button>
             <button
-              onClick={() => {
-                setConfirming(true);
-                setTimeout(() => navigate('/app/success'), 1500);
-              }}
+              onClick={() => handleFinalSubmit('स्वीकृत')}
               disabled={confirming}
               className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl text-white transition-all hover:opacity-90"
               style={{ background: 'linear-gradient(135deg, #2E9E50, #1A7A38)', fontSize: '15px', fontWeight: 700 }}

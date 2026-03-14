@@ -1,14 +1,14 @@
 import React from 'react';
 import { Link } from 'react-router';
-import bannerImg from 'figma:asset/ff09e3e590edd9910d68b0496ed82e2fbc7fddf3.png';
-import birthCertIcon from 'figma:asset/54e1443fe5df891a15413b1e4aebff6d95eb3718.png';
-import deathCertIcon from 'figma:asset/8a9e6b29ede8826a773fb0dcb8e6617fa6302457.png';
-import marriageIcon from 'figma:asset/d0b779d5d6795ed76654bb091d1f6d9cca41fc8c.png';
-import residenceIcon from 'figma:asset/a44e4ce4c6fe33679a557ce2f665dd9bed65c373.png';
-import farmerIcon from 'figma:asset/be2ab8d5eb8679c506a9c0dc9c2cfb72cb32949e.png';
-import pensionIcon from 'figma:asset/3d7d71e3c8d6321c827a3e90a846fe61ddcd1802.png';
-import incomeIcon from 'figma:asset/d822c91fd76f62163d7c031b8d1d1fb2f4af683a.png';
-import casteIcon from 'figma:asset/56f9c4775c575ee990502a6775ddb39c1d3cc8de.png';
+const bannerImg = '/slider8.jpg.jpeg';
+const birthCertIcon = '';
+const deathCertIcon = '';
+const marriageIcon = '';
+const residenceIcon = '';
+const farmerIcon = '';
+const pensionIcon = '';
+const incomeIcon = '';
+const casteIcon = '';
 import { AshokChakra } from '../components/AshokChakra';
 
 const services = [
@@ -218,7 +218,7 @@ export function PortalHome() {
                   नवीनतम सूचनाएं | Updates
                 </h3>
               </div>
-              <div className="divide-y" style={{ divideColor: '#EEF1F7' }}>
+              <div className="divide-y" style={{ borderColor: '#EEF1F7' }}>
                 {updates.map((update, i) => (
                   <div key={i} className="p-3 hover:bg-gray-50 cursor-pointer">
                     <div className="flex items-center gap-2 mb-1">

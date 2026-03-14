@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router';
 import { AshokChakra } from '../components/AshokChakra';
 import { CheckCircle } from 'lucide-react';
 
@@ -24,11 +24,85 @@ const skeletonFields = [
 
 export function AIExtractionPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [currentStep, setCurrentStep] = useState(0);
   const [completed, setCompleted] = useState(false);
   const [progress, setProgress] = useState(0);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    const jobIds = location.state?.jobIds || [];
+    if (jobIds.length === 0) {
+      // Fallback to fake animation if no jobs
+      runFakeAnimation();
+      return;
+    }
+
+    startRealExtraction(jobIds);
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [navigate]);
+
+  const startRealExtraction = async (jobIds: string[]) => {
+    try {
+      setCurrentStep(1);
+      setProgress(20);
+      
+      const res = await fetch('http://127.0.0.1:5000/api/extract/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_ids: jobIds,
+          pipeline: 'ollama',
+          fields: skeletonFields
+        })
+      });
+      
+      if (!res.ok) throw new Error("API call failed");
+      
+      setCurrentStep(2);
+      setProgress(40);
+      
+      // Poll for the first job's result
+      const mainJobId = jobIds[0];
+      pollingRef.current = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`http://127.0.0.1:5000/api/status/${mainJobId}`);
+          if (statusRes.ok) {
+            const statusData = await statusRes.json();
+            if (statusData.status === 'processing') {
+                setProgress(Math.min(90, 40 + statusData.current_stage * 15));
+                setCurrentStep(statusData.current_stage > 2 ? 3 : 2);
+            } else if (statusData.status === 'complete') {
+                const resultRes = await fetch(`http://127.0.0.1:5000/api/result/${mainJobId}`);
+                if (resultRes.ok) {
+                  const data = await resultRes.json();
+                  if (data.status === 'complete' || data.results) {
+                    if (pollingRef.current) clearInterval(pollingRef.current);
+                    setCurrentStep(4);
+                    setProgress(100);
+                    setCompleted(true);
+                    setTimeout(() => {
+                      navigate('/app/review', { state: { results: data.results } });
+                    }, 1500);
+                  }
+                }
+            }
+          }
+        } catch (e) {
+          console.error("Polling error", e);
+        }
+      }, 2000);
+      
+    } catch (e) {
+      console.error(e);
+      alert("Failed to start AI extraction.");
+      runFakeAnimation(); // fallback
+    }
+  };
+
+  const runFakeAnimation = () => {
     const timers: ReturnType<typeof setTimeout>[] = [];
 
     steps.forEach((step, i) => {
@@ -54,7 +128,7 @@ export function AIExtractionPage() {
     );
 
     return () => timers.forEach(clearTimeout);
-  }, [navigate]);
+  };
 
   return (
     <div
