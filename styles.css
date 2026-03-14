@@ -241,7 +241,7 @@ html, body {
 .landing-card {
   background: var(--white);
   border-radius: var(--radius-lg);
-  padding: 32px 24px;
+  padding: 28px 24px;
   text-align: center;
   box-shadow: 0 4px 20px var(--shadow);
   animation: fadeSlideIn 0.4s ease-out forwards;
@@ -506,6 +506,52 @@ html, body {
   .service-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------- Citizen Gate Card (Phone + Aadhaar) ---------- */
+.landing-card .citizen-form {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.citizen-label {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.citizen-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  font-size: var(--font-md);
+  font-family: var(--font-family);
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.citizen-input:focus {
+  border-color: var(--saffron);
+  box-shadow: 0 0 0 2px rgba(255, 153, 51, 0.2);
+}
+
+.citizen-error {
+  min-height: 16px;
+  font-size: var(--font-xs);
+  color: #d32f2f;
+}
+
+.citizen-form .btn-assist {
+  margin-top: 12px;
+  width: 100%;
+  justify-content: center;
 }
 
 /* ============================================================

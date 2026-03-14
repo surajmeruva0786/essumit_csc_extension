@@ -131,6 +131,83 @@
     }
   }
 
+  // ─── Citizen Pre-Gate Card (Phone + Aadhaar) ───────────────
+  function showCitizenGateCard() {
+    chatContainer.innerHTML = "";
+    inputArea.classList.add("hidden");
+
+    const card = document.createElement("div");
+    card.className = "landing-card";
+
+    card.innerHTML = `
+      <div class="logo">📋</div>
+      <h2>नागरिक विवरण / Citizen Details</h2>
+      <p style="margin-bottom: 16px;">
+        आगे बढ़ने से पहले नागरिक का मोबाइल नंबर और आधार संख्या दर्ज करें।
+      </p>
+      <div class="citizen-form">
+        <label class="citizen-label">📱 मोबाइल नंबर (10 अंक)</label>
+        <input id="cscCitizenPhone" class="citizen-input" type="tel" placeholder="10 अंकों का मोबाइल नंबर / 10-digit mobile..." maxlength="10" />
+        <div id="cscCitizenPhoneError" class="citizen-error"></div>
+
+        <label class="citizen-label" style="margin-top:12px;">🆔 आधार संख्या (12 अंक)</label>
+        <input id="cscCitizenAadhaar" class="citizen-input" type="tel" placeholder="12 अंकों का आधार नंबर / 12-digit Aadhaar..." maxlength="12" />
+        <div id="cscCitizenAadhaarError" class="citizen-error"></div>
+
+        <button class="btn btn-assist" id="btnCitizenContinue" style="margin-top:16px;">
+          <span class="btn-icon">➡️</span>
+          <span class="btn-content">
+            <span class="btn-label">आगे बढ़ें / Continue</span>
+            <span class="btn-desc">Go to Form Assist</span>
+          </span>
+        </button>
+      </div>
+    `;
+
+    chatContainer.appendChild(card);
+
+    const phoneInput = card.querySelector("#cscCitizenPhone");
+    const aadhaarInput = card.querySelector("#cscCitizenAadhaar");
+    const phoneError = card.querySelector("#cscCitizenPhoneError");
+    const aadhaarError = card.querySelector("#cscCitizenAadhaarError");
+    const btnContinue = card.querySelector("#btnCitizenContinue");
+
+    if (btnContinue) {
+      btnContinue.addEventListener("click", () => {
+        const phone = (phoneInput.value || "").trim();
+        const aadhaar = (aadhaarInput.value || "").trim();
+
+        let valid = true;
+        phoneError.textContent = "";
+        aadhaarError.textContent = "";
+
+        // Simple validations
+        const phoneRegex = /^[6-9]\d{9}$/;
+        if (!phoneRegex.test(phone)) {
+          phoneError.textContent = "कृपया 6-9 से शुरू होने वाला 10 अंकों का वैध मोबाइल नंबर दर्ज करें।";
+          valid = false;
+        }
+
+        const aadhaarRegex = /^\d{12}$/;
+        if (!aadhaarRegex.test(aadhaar)) {
+          aadhaarError.textContent = "कृपया 12 अंकों का वैध आधार नंबर दर्ज करें।";
+          valid = false;
+        }
+
+        if (!valid) return;
+
+        // Save into sessionData for later use
+        sessionData = sessionData || {};
+        sessionData.citizenPhone = phone;
+        sessionData.citizenAadhaar = aadhaar;
+        saveSession();
+
+        // Proceed to main landing card
+        showLandingCard();
+      });
+    }
+  }
+
   // ─── Landing Card ──────────────────────────────────────────
   function showLandingCard() {
     chatContainer.innerHTML = "";
@@ -832,6 +909,7 @@
       <div class="extraction-results" id="extractionWidget">
         <div class="extraction-header">
           <span>📝 निकाले गए विवरण / Extracted Details</span>
+          <div class="validation-overall-summary" id="csc-validation-summary"></div>
         </div>
         <div class="extraction-list">
     `;
@@ -896,6 +974,7 @@
             </div>
             <span class="confidence-text">${confPct} - ${confText}</span>
           </div>
+          <div class="field-validation" data-validation-for="${key}"></div>
         </div>
       `;
     });
@@ -905,6 +984,9 @@
         <div class="extraction-footer">
           <button class="btn btn-primary checklist-continue-btn" id="btnValidate">
             🤖 सत्यापित करें / Validate Application
+          </button>
+          <button class="btn btn-secondary checklist-continue-btn" id="btnAutofill" style="margin-top:8px;">
+            ✨ फॉर्म ऑटो-फ़िल करें / Auto-Fill Form
           </button>
         </div>
       </div>
@@ -916,6 +998,10 @@
     const btnValidate = document.getElementById("btnValidate");
     if (btnValidate) {
       btnValidate.addEventListener("click", () => runValidationAndShowDecision(config));
+    }
+    const btnAutofill = document.getElementById("btnAutofill");
+    if (btnAutofill) {
+      btnAutofill.addEventListener("click", () => executeAutoFill(config, "btnAutofill"));
     }
     
     // Listen for manual edits to update session data
@@ -984,12 +1070,81 @@
         finalFields
       );
 
-      renderValidationUI(result, config);
+      // Apply validation inline to the extracted fields widget instead of a separate message box
+      applyFieldValidationToWidget(result);
     } catch (e) {
       console.error("Validation error:", e);
       // Failsafe: proceed to autofill directly if AI totally crashes
       executeAutoFill(config);
     }
+  }
+
+  /**
+   * Inline display of AI validation results directly inside the extracted fields widget.
+   * For each field, show whether it looks correct or what the issue is.
+   */
+  function applyFieldValidationToWidget(result) {
+    const widget = document.getElementById("extractionWidget");
+    if (!widget || !sessionData.extractedData || !sessionData.extractedData.extractedFields) return;
+
+    const issuesByField = {};
+    (result.issues || []).forEach(issue => {
+      const fieldKey = issue.field;
+      if (!fieldKey) return;
+      if (!issuesByField[fieldKey]) issuesByField[fieldKey] = [];
+      issuesByField[fieldKey].push(issue);
+    });
+
+    // Overall summary at the top of the widget
+    const summaryEl = document.getElementById("csc-validation-summary");
+    if (summaryEl) {
+      const risk = result.overallRisk || "LOW";
+      let riskLabel = "🟢 LOW RISK / कम जोखिम";
+      if (risk === "HIGH") riskLabel = "🔴 HIGH RISK / उच्च जोखिम";
+      else if (risk === "MEDIUM") riskLabel = "🟡 MEDIUM RISK / मध्यम जोखिम";
+
+      summaryEl.innerHTML = `
+        <div class="validation-summary-inline">
+          <div class="risk-label">${riskLabel}</div>
+          <div class="summary-text">
+            ${escapeHTML(result.summaryHindi || "")}<br>
+            <span style="font-size:0.9em;color:var(--text-secondary)">${escapeHTML(result.summaryEnglish || "")}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    // Per-field validation messages
+    Object.keys(sessionData.extractedData.extractedFields).forEach(key => {
+      const container = widget.querySelector(`.field-validation[data-validation-for="${key}"]`);
+      if (!container) return;
+
+      const fieldIssues = issuesByField[key] || [];
+      if (fieldIssues.length === 0) {
+        container.innerHTML = `
+          <div class="field-validation-ok">
+            ✅ सही लगता है / Looks good
+          </div>
+        `;
+      } else {
+        const html = fieldIssues.map(issue => {
+          let icon = "ℹ️";
+          let cls = "severity-info";
+          if (issue.severity === "CRITICAL") { icon = "🛑"; cls = "severity-critical"; }
+          else if (issue.severity === "WARNING") { icon = "⚠️"; cls = "severity-warning"; }
+          return `
+            <div class="field-validation-issue ${cls}">
+              <span class="issue-icon">${icon}</span>
+              <span class="issue-text">
+                ${escapeHTML(issue.messageHindi || "")}<br>${escapeHTML(issue.message || "")}
+              </span>
+              ${issue.suggestion ? `<span class="issue-suggestion">💡 ${escapeHTML(issue.suggestion)}</span>` : ""}
+            </div>
+          `;
+        }).join("");
+        container.innerHTML = html;
+      }
+    });
   }
 
   function renderValidationUI(result, config) {
@@ -1513,17 +1668,17 @@
     try {
       chrome.runtime.sendMessage({ type: "GET_FORM_STATUS" }, (response) => {
         if (chrome.runtime.lastError) {
-          showLandingCard();
+          showCitizenGateCard();
           return;
         }
         if (response && response.detected) {
           isFormDetected = true;
           formInfo = response;
         }
-        showLandingCard();
+        showCitizenGateCard();
       });
     } catch (e) {
-      showLandingCard();
+      showCitizenGateCard();
     }
   }
 
