@@ -181,11 +181,13 @@ CURRENT_APPLICATION_CONTEXT (may be empty):
 ${JSON.stringify(contextSnippet, null, 2)}
 
 Instructions:
-- ALWAYS provide the complete answer in BOTH Hindi and English.
-- First write the full response in Hindi.
-- Then write a divider "---" and provide the exact same response translated to English.
-- For Hindi, use simple, operator-friendly phrasing.
-- For English, keep it highly professional.
+- ALWAYS provide the complete answer in THREE languages: Hindi, English, and Chhattisgarhi (छत्तीसगढ़ी).
+- Use this exact format with section headers and dividers:
+  1) First, write the full response in Hindi (हिंदी). Use simple, operator-friendly phrasing.
+  2) Then a line "---" as divider.
+  3) Then the same response in English. Keep it professional.
+  4) Then a line "---" as divider.
+  5) Then the same response in Chhattisgarhi (छत्तीसगढ़ी). Use natural Chhattisgarhi dialect/spelling where appropriate (e.g. common local words and phrasing used in Chhattisgarh).
 - If you are not fully sure, say so and suggest that the operator verify on the official portal.
 - If the operator's question is generic, infer likely state‑level or central schemes from your knowledge.
 - If information is missing, clearly list what questions the operator should ask the citizen.
@@ -197,13 +199,13 @@ Instructions:
 Operator Question:
 ${question}
 
-Please give:
+Please give (for each language: Hindi, English, Chhattisgarhi):
 1) Short decision summary.
 2) Recommended scheme(s) with eligibility and key benefits.
 3) Required documents (bullet list).
 4) Step-by-step application process (bullet list).
 
-Remember: Give the ENTIRE answer in Hindi first. Then put "---". Then give the ENTIRE answer in English.`;
+Format: Full answer in Hindi, then "---", then full answer in English, then "---", then full answer in Chhattisgarhi (छत्तीसगढ़ी).`;
 
   const responseText = await callGroq(apiKey, {
     messages: [

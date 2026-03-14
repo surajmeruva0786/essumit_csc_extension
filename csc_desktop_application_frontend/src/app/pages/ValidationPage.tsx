@@ -239,21 +239,21 @@ export function ValidationPage() {
             </div>
           </div>
 
-          {/* Action Buttons */}
+          {/* Action Buttons - rectangular, professional */}
           <div className="flex gap-3">
             <button
               onClick={() => navigate('/app/new')}
-              className="flex items-center gap-2 px-6 py-3.5 rounded-xl border transition-all hover:bg-gray-50"
-              style={{ borderColor: '#D93025', color: '#D93025', fontSize: '14px', fontWeight: 600 }}
+              className="flex items-center gap-2 px-5 py-3 rounded-none border-2 transition-colors hover:bg-red-50"
+              style={{ borderColor: '#B91C1C', color: '#B91C1C', fontSize: '14px', fontWeight: 600 }}
             >
-              <XCircle size={16} />
+              <XCircle size={16} strokeWidth={2.5} />
               आवेदन रद्द करें | Cancel Application
             </button>
             <button
               onClick={() => handleFinalSubmit('प्रक्रियाधीन')}
               disabled={confirming}
-              className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl text-white transition-all hover:opacity-90"
-              style={{ background: 'linear-gradient(135deg, #E8A020, #C87818)', fontSize: '15px', fontWeight: 700 }}
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-none bg-amber-500 text-white border border-amber-600 transition-colors hover:bg-amber-600 disabled:opacity-70"
+              style={{ fontSize: '14px', fontWeight: 600 }}
             >
               {confirming ? (
                 <><AshokChakra size={18} color="white" animated /> सबमिट हो रहा है...</>
@@ -264,13 +264,13 @@ export function ValidationPage() {
             <button
               onClick={() => handleFinalSubmit('स्वीकृत')}
               disabled={confirming}
-              className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl text-white transition-all hover:opacity-90"
-              style={{ background: 'linear-gradient(135deg, #2E9E50, #1A7A38)', fontSize: '15px', fontWeight: 700 }}
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-none bg-emerald-600 text-white border border-emerald-700 transition-colors hover:bg-emerald-700 disabled:opacity-70"
+              style={{ fontSize: '14px', fontWeight: 600 }}
             >
               {confirming ? (
                 <><AshokChakra size={18} color="white" animated /> प्रस्तुत हो रहा है...</>
               ) : (
-                <><CheckCircle size={16} /> सत्यापित सबमिट | Verified Submit</>
+                <><CheckCircle size={16} strokeWidth={2.5} /> सत्यापित सबमिट | Verified Submit</>
               )}
             </button>
           </div>
