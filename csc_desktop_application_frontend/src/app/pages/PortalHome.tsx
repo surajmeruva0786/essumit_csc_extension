@@ -41,37 +41,14 @@ export function PortalHome() {
   return (
     <div style={{ fontFamily: "'Noto Sans', 'Noto Sans Devanagari', sans-serif" }}>
 
-      {/* HERO BANNER with छत्तीसगढ़ ई-डिस्ट्रिक्ट branding overlay */}
-      <div className="w-full relative" style={{ maxHeight: '260px', overflow: 'hidden' }}>
+      {/* HERO BANNER */}
+      <div className="w-full" style={{ maxHeight: '260px', overflow: 'hidden' }}>
         <img
           src={bannerImg}
           alt="लोक सेवा केंद्र - CSC Sahayak Banner"
           className="w-full object-cover object-center"
           style={{ width: '100%', display: 'block' }}
         />
-        {/* Branding overlay — छत्तीसगढ़ ई-डिस्ट्रिक्ट */}
-        <div
-          className="absolute top-4 left-4 flex items-center gap-3 px-4 py-2 rounded-lg shadow-md"
-          style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(4px)' }}
-        >
-          <img src="/cg.png" alt="CG Emblem" className="h-12 w-12 object-contain" />
-          <div>
-            <p
-              style={{
-                fontFamily: "'Noto Sans Devanagari', sans-serif",
-                fontSize: '18px',
-                fontWeight: 700,
-                color: '#1C2B4A',
-                lineHeight: 1.2,
-              }}
-            >
-              छत्तीसगढ़ ई-डिस्ट्रिक्ट
-            </p>
-            <p style={{ fontSize: '12px', color: '#5A6B85', fontWeight: 500 }}>
-              Chhattisgarh e-District Portal
-            </p>
-          </div>
-        </div>
       </div>
 
       {/* Stats Bar */}

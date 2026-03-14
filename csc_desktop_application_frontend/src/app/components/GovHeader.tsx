@@ -72,13 +72,29 @@ export function GovHeader({ isLoggedIn = false, operatorName = 'राजेश 
       {/* Main Header */}
       <div className="bg-white border-b-4" style={{ borderColor: '#E8701A' }}>
         <div className="max-w-screen-xl mx-auto px-6 py-7 flex items-center">
-          {/* Left: CG Logo */}
+          {/* Left: CG Logo + Title */}
           <Link to="/" className="flex-1 flex items-center gap-4">
             <img
               src="/cg.png"
               alt="Chhattisgarh e-District"
               className="h-24 object-contain"
             />
+            <div>
+              <p
+                style={{
+                  fontFamily: "'Noto Sans Devanagari', sans-serif",
+                  fontSize: '20px',
+                  fontWeight: 700,
+                  color: '#1C2B4A',
+                  lineHeight: 1.2,
+                }}
+              >
+                छत्तीसगढ़ ई-डिस्ट्रिक्ट
+              </p>
+              <p style={{ fontSize: '13px', color: '#5A6B85', fontWeight: 500, marginTop: '3px' }}>
+                Chhattisgarh e-District
+              </p>
+            </div>
           </Link>
 
           {/* Center: Site Title */}
