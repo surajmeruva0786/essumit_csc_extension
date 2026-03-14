@@ -2,7 +2,7 @@
 
 Modern web interface for the patent-eligible OCR pipeline with real-time processing visualization.
 
-## Features
+## Featuress
 
 - **Drag-and-drop file upload** (PDF, PNG, JPG, TIFF, BMP)
 - **Dual pipeline selection** (Standard vs Patent)
