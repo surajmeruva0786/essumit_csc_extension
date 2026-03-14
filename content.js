@@ -70,46 +70,197 @@
 
   /**
    * Dismiss common full-page loading overlays so the form is accessible after auto-fill.
-   * Many government portals keep a loading overlay visible; we hide likely candidates.
+   * Many government portals keep a loading overlay visible; we hide likely candidates
+   * and also re-enable pointer events on the main page.
    */
   function dismissPageLoadingOverlay() {
-    const candidates = [
-      "[class*='loading'][class*='overlay']",
-      "[id*='loading'][id*='overlay']",
-      "[class*='loader']",
-      ".loading-overlay",
-      ".page-loader",
-      "[class*='blockui']",
-      "[id*='blockui']",
-      "[class*='loading'][style*='fixed']",
-      "div[style*='position: fixed'][style*='z-index']"
-    ];
-    const toHide = [];
-    candidates.forEach(sel => {
-      try {
-        document.querySelectorAll(sel).forEach(el => {
-          const style = window.getComputedStyle(el);
-          const isFixed = style.position === "fixed" || el.style.position === "fixed";
-          const zIndex = parseInt(style.zIndex || el.style.zIndex || "0", 10);
-          const coversScreen = isFixed && (zIndex > 100 || el.offsetWidth > 100 && el.offsetHeight > 100);
-          if (coversScreen || el.classList.toString().toLowerCase().includes("loading")) {
-            toHide.push(el);
+    try {
+      // 1) Remove obvious full-screen overlay elements
+      const candidates = [
+        "[class*='loading'][class*='overlay']",
+        "[id*='loading'][id*='overlay']",
+        "[class*='loader']",
+        ".loading-overlay",
+        ".page-loader",
+        "[class*='blockui']",
+        "[id*='blockui']",
+        "[class*='modal-backdrop']",
+        "[class*='spinner']",
+        "[class*='overlay'][style*='fixed']",
+        "div[style*='position: fixed'][style*='z-index']"
+      ];
+      const toHide = [];
+      candidates.forEach(sel => {
+        try {
+          document.querySelectorAll(sel).forEach(el => {
+            const style = window.getComputedStyle(el);
+            const isFixed = style.position === "fixed" || el.style.position === "fixed";
+            const zIndex = parseInt(style.zIndex || el.style.zIndex || "0", 10);
+            const coversScreen =
+              isFixed &&
+              (zIndex > 50 || (el.offsetWidth >= window.innerWidth * 0.6 && el.offsetHeight >= window.innerHeight * 0.4));
+            const cls = el.className ? String(el.className).toLowerCase() : "";
+            if (coversScreen || cls.includes("loading") || cls.includes("overlay") || cls.includes("blockui")) {
+              toHide.push(el);
+            }
+          });
+        } catch (e) { /* ignore invalid selector */ }
+      });
+      toHide.forEach(el => {
+        if (el && el.parentNode) {
+          el.style.setProperty("display", "none", "important");
+          el.style.setProperty("pointer-events", "none", "important");
+          el.setAttribute("data-csc-dismissed", "1");
+        }
+      });
+
+      // 2) Some sites gray out the whole page via a "loading" class on body/html
+      const roots = [document.body, document.documentElement];
+      roots.forEach(root => {
+        if (!root || !root.classList) return;
+        const classesToRemove = [];
+        root.classList.forEach(cls => {
+          const lower = cls.toLowerCase();
+          if (lower.includes("loading") || lower.includes("overlay") || lower.includes("blockui")) {
+            classesToRemove.push(cls);
           }
         });
-      } catch (e) { /* ignore invalid selector */ }
-    });
-    toHide.forEach(el => {
-      if (el && el.parentNode) {
-        el.style.setProperty("display", "none", "important");
-        el.setAttribute("data-csc-dismissed", "1");
+        classesToRemove.forEach(c => root.classList.remove(c));
+        root.style.setProperty("pointer-events", "auto", "important");
+        root.style.removeProperty("filter");
+        root.style.removeProperty("opacity");
+      });
+    } catch (e) {
+      // Non-fatal; best-effort only
+    }
+  }
+
+  /**
+   * After autofill, run overlay dismissal multiple times (in case the site
+   * toggles its loader a bit later).
+   */
+  function scheduleOverlayCleanup() {
+    dismissPageLoadingOverlay();
+    let attempts = 0;
+    const maxAttempts = 10;
+    const interval = setInterval(() => {
+      attempts += 1;
+      dismissPageLoadingOverlay();
+      if (attempts >= maxAttempts) {
+        clearInterval(interval);
       }
-    });
+    }, 500);
+  }
+
+  /**
+   * Some portals keep re-attaching loaders or toggling classes dynamically.
+   * Watch the DOM for a short period after auto-fill and continuously remove blockers.
+   */
+  let cscOverlayObserver = null;
+  function startTemporaryOverlayObserver(durationMs = 20000) {
+    try {
+      if (cscOverlayObserver) {
+        cscOverlayObserver.disconnect();
+        cscOverlayObserver = null;
+      }
+      cscOverlayObserver = new MutationObserver(() => {
+        dismissPageLoadingOverlay();
+      });
+      cscOverlayObserver.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["class", "style", "aria-busy", "disabled"]
+      });
+      setTimeout(() => {
+        try {
+          if (cscOverlayObserver) cscOverlayObserver.disconnect();
+          cscOverlayObserver = null;
+        } catch (e) {}
+      }, durationMs);
+    } catch (e) {
+      // best-effort only
+    }
+  }
+
+  /**
+   * Many CG/eDistrict portals use a global loadingToggle() function with a
+   * .loading + .overlay spinner that can get stuck. Patch it so that even if
+   * the page calls loadingToggle(1) and never calls loadingToggle(0),
+   * we auto-hide the overlay after a short grace period.
+   */
+  function patchPortalLoadingToggle() {
+    try {
+      const w = window;
+      if (!w || typeof w.loadingToggle !== "function") return;
+      if (w.loadingToggle && w.loadingToggle.__csc_patched) return;
+
+      const original = w.loadingToggle;
+      const patched = function patchedLoadingToggle(flag) {
+        try {
+          // Call original implementation so the site logic still works.
+          original.apply(this, arguments);
+        } catch (e) {
+          // Ignore original errors; we still enforce our cleanup below.
+        }
+
+        try {
+          const wrappers = document.querySelectorAll(".loading, .overlay");
+          wrappers.forEach(el => {
+            if (!el) return;
+            if (flag === 0) {
+              // Explicit hide request
+              el.style.setProperty("display", "none", "important");
+              el.style.setProperty("pointer-events", "none", "important");
+            } else {
+              // Show request: ensure it cannot block forever
+              el.style.setProperty("display", "block", "important");
+              el.style.setProperty("pointer-events", "auto", "important");
+              setTimeout(() => {
+                try {
+                  el.style.setProperty("display", "none", "important");
+                  el.style.setProperty("pointer-events", "none", "important");
+                } catch (e) {}
+              }, 8000); // max 8s before we force-hide
+            }
+          });
+        } catch (e) {}
+      };
+
+      patched.__csc_patched = true;
+      w.loadingToggle = patched;
+    } catch (e) {
+      // best-effort only
+    }
+  }
+
+  /** Ensure the page can be interacted with (pointer events / scrolling). */
+  function forceUnblockPageInteraction() {
+    try {
+      const roots = [document.body, document.documentElement];
+      roots.forEach(root => {
+        if (!root) return;
+        root.style.setProperty("pointer-events", "auto", "important");
+        // Many loaders also lock scrolling
+        if ((root.style.overflow || "").toLowerCase() === "hidden") {
+          root.style.setProperty("overflow", "auto", "important");
+        }
+      });
+      // Remove any lingering cursor-wait on body
+      if (document.body) document.body.style.removeProperty("cursor");
+    } catch (e) {}
   }
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "AUTO_FILL_FORM") {
       const result = autoFillForm(message.fields, message.selectors, message.confidenceMap);
-      setTimeout(dismissPageLoadingOverlay, 400);
+      // Give the page a moment to show its own loader, then repeatedly clear it.
+      setTimeout(() => {
+        patchPortalLoadingToggle();
+        scheduleOverlayCleanup();
+        startTemporaryOverlayObserver(20000);
+        forceUnblockPageInteraction();
+      }, 300);
       sendResponse(result);
     } else if (message.type === "SCAN_FORM_FIELDS") {
       const scannedFields = scanFormFields();
@@ -522,10 +673,10 @@
       }
     }
 
-    // Trigger events so the form recognizes the change
+    // Trigger events so the form recognizes the change.
+    // Avoid aggressive blur() because some portals show a global loader and sometimes never clear it.
     element.dispatchEvent(new Event("input", { bubbles: true }));
     element.dispatchEvent(new Event("change", { bubbles: true }));
-    element.dispatchEvent(new Event("blur", { bubbles: true }));
   }
 
   /**
@@ -597,6 +748,19 @@
       @keyframes csc-pulse {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.5; }
+      }
+
+      /* 🔒 Hard kill common government portal loaders on autofill pages.
+         This targets CG eDistrict-style .loading/.overlay spinners so they
+         cannot block interaction after auto-fill. */
+      .loading,
+      .loading .overlay,
+      .overlay,
+      .overlay__inner,
+      .overlay__content {
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
       }
     `;
     document.head.appendChild(style);
