@@ -326,10 +326,10 @@ export function NewApplicationPage() {
           </button>
         </div>
 
-        {/* Right: AI Chat Panel */}
+        {/* Right: AI Chat Panel - fixed height */}
         <div
-          className="rounded-xl border flex flex-col overflow-hidden"
-          style={{ borderColor: '#D8DDE8', background: 'white' }}
+          className="rounded-xl border flex flex-col overflow-hidden self-start"
+          style={{ borderColor: '#D8DDE8', background: 'white', height: '620px', width: '320px' }}
         >
           <div className="flex items-center gap-2 px-4 py-3.5 border-b" style={{ background: '#1C2B4A', borderColor: '#2D3F5E' }}>
             <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(234,179,8,0.2)' }}>
@@ -365,7 +365,7 @@ export function NewApplicationPage() {
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto p-3 space-y-4 min-h-[280px]" style={{ maxHeight: '400px' }}>
+          <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-4">
             {messages.map((msg, i) => (
               <div key={i} className={`flex gap-2 ${msg.sender === 'user' ? 'justify-end flex-row-reverse' : 'justify-start'}`}>
                 {msg.sender === 'bot' ? (
