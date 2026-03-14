@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { ChevronRight, User, Phone, MapPin, MessageCircle, Send, Bot, CheckCircle } from 'lucide-react';
-// Icons removed
+import { ChevronRight, User, Phone, MapPin, MessageCircle, Send, Bot, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { chatWithOllama, checkOllama, type ChatMessage } from '@/app/api/ollamaChatApi';
 
 const services = [
   { id: 'birth', emoji: '👶', label: 'जन्म प्रमाण पत्र', labelEn: 'Birth Certificate', docs: 3, days: '7' },
@@ -14,9 +14,9 @@ const services = [
   { id: 'pension', emoji: ' пен्शन ', label: 'पेंशन स्कीम्स', labelEn: 'Pension Schemes', docs: 9, days: '25' },
 ];
 
-const chatMessages = [
+const initialMessages: ChatMessage[] = [
   { sender: 'bot', text: 'नमस्ते! मैं CSC AI सहायक हूं। आज कौन सी सेवा के लिए आवेदन करना है?' },
-  { sender: 'bot', text: 'आवेदन शुरू करने के लिए बाईं तरफ से सेवा चुनें और नागरिक की जानकारी भरें।' },
+  { sender: 'bot', text: 'आवेदन शुरू करने के लिए बाईं तरफ से सेवा चुनें और नागरिक की जानकारी भरें। मैं दस्तावेज़, फीस और प्रक्रिया के बारे में जानकारी दे सकता हूं।' },
 ];
 
 export function NewApplicationPage() {
@@ -26,19 +26,43 @@ export function NewApplicationPage() {
   const [citizenPhone, setCitizenPhone] = useState('');
   const [citizenAddress, setCitizenAddress] = useState('');
   const [chatInput, setChatInput] = useState('');
-  const [messages, setMessages] = useState(chatMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [ollamaStatus, setOllamaStatus] = useState<'checking' | 'ok' | 'offline' | null>(null);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const sendMessage = () => {
-    if (!chatInput.trim()) return;
-    const userMsg = { sender: 'user', text: chatInput };
-    const botReply = {
-      sender: 'bot',
-      text: selectedService
-        ? `आपने "${services.find((s) => s.id === selectedService)?.label}" चुना है। आवश्यक दस्तावेज़ अपलोड करने के लिए आगे बढ़ें।`
-        : 'कृपया पहले एक सेवा चुनें। फिर मैं आपको आवश्यक दस्तावेज़ों की सूची दूंगा।',
-    };
-    setMessages((prev) => [...prev, userMsg, botReply]);
+  useEffect(() => {
+    checkOllama().then((ok) => setOllamaStatus(ok ? 'ok' : 'offline'));
+  }, []);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, chatLoading]);
+
+  const sendMessage = async () => {
+    const text = chatInput.trim();
+    if (!text || chatLoading) return;
+    setChatError(null);
+    const userMsg: ChatMessage = { sender: 'user', text };
+    setMessages((prev) => [...prev, userMsg]);
     setChatInput('');
+    setChatLoading(true);
+    try {
+      const selectedSvc = selectedService ? services.find((s) => s.id === selectedService) : null;
+      const selectedServiceName = selectedSvc ? selectedSvc.labelEn : undefined;
+      const reply = await chatWithOllama(text, messages, { selectedServiceName });
+      setMessages((prev) => [...prev, { sender: 'bot', text: reply }]);
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : 'Something went wrong.';
+      setChatError(errMsg);
+      setMessages((prev) => [
+        ...prev,
+        { sender: 'bot', text: `जवाब नहीं मिल सका। कृपया Ollama चालू करें (localhost:11434) और दोबारा कोशिश करें। Error: ${errMsg}` },
+      ]);
+    } finally {
+      setChatLoading(false);
+    }
   };
 
   const handleProceed = () => {
@@ -308,63 +332,114 @@ export function NewApplicationPage() {
           style={{ borderColor: '#D8DDE8', background: 'white' }}
         >
           <div className="flex items-center gap-2 px-4 py-3.5 border-b" style={{ background: '#1C2B4A', borderColor: '#2D3F5E' }}>
-            <Bot size={18} className="text-yellow-400" />
+            <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(234,179,8,0.2)' }}>
+              <Bot size={18} className="text-yellow-400" />
+            </div>
             <div>
               <p className="text-white" style={{ fontSize: '14px', fontWeight: 600 }}>AI सहायक</p>
-              <p className="text-gray-400" style={{ fontSize: '12px' }}>AI Assistant</p>
+              <p className="text-gray-400" style={{ fontSize: '12px' }}>AI Assistant (Ollama)</p>
             </div>
-            <div className="ml-auto flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-green-400" />
-              <span className="text-green-400" style={{ fontSize: '11px' }}>Active</span>
+            <div className="ml-auto flex items-center gap-1.5">
+              {ollamaStatus === 'checking' && (
+                <Loader2 size={12} className="text-gray-400 animate-spin" />
+              )}
+              {ollamaStatus === 'ok' && (
+                <>
+                  <div className="w-2 h-2 rounded-full bg-green-400" />
+                  <span className="text-green-400" style={{ fontSize: '11px' }}>Active</span>
+                </>
+              )}
+              {ollamaStatus === 'offline' && (
+                <>
+                  <div className="w-2 h-2 rounded-full bg-amber-400" />
+                  <span className="text-amber-300" style={{ fontSize: '11px' }}>Offline</span>
+                </>
+              )}
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-3 space-y-3" style={{ maxHeight: '400px' }}>
+          {chatError && (
+            <div className="mx-3 mt-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200" style={{ fontSize: '12px' }}>
+              <AlertCircle size={14} className="text-amber-600 flex-shrink-0" />
+              <span className="text-amber-800">{chatError}</span>
+            </div>
+          )}
+
+          <div className="flex-1 overflow-y-auto p-3 space-y-4 min-h-[280px]" style={{ maxHeight: '400px' }}>
             {messages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                {msg.sender === 'bot' && (
+              <div key={i} className={`flex gap-2 ${msg.sender === 'user' ? 'justify-end flex-row-reverse' : 'justify-start'}`}>
+                {msg.sender === 'bot' ? (
                   <div
-                    className="w-7 h-7 rounded-full flex items-center justify-center mr-2 flex-shrink-0 mt-0.5"
+                    className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
                     style={{ background: '#1C2B4A' }}
                   >
-                    <Bot size={13} className="text-yellow-400" />
+                    <Bot size={14} className="text-yellow-400" />
+                  </div>
+                ) : (
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                    style={{ background: '#E8701A' }}
+                  >
+                    <User size={14} className="text-white" />
                   </div>
                 )}
                 <div
-                  className="max-w-[85%] px-3 py-2 rounded-xl"
+                  className="max-w-[82%] px-3.5 py-2.5 rounded-2xl shadow-sm"
                   style={{
-                    background: msg.sender === 'bot' ? '#EEF1F7' : '#E8701A',
-                    color: msg.sender === 'bot' ? '#3D4F6B' : 'white',
+                    background: msg.sender === 'bot' ? '#EEF1F7' : '#003380',
+                    color: msg.sender === 'bot' ? '#1C2B4A' : 'white',
                     fontSize: '13px',
-                    lineHeight: 1.5,
-                    borderRadius: msg.sender === 'bot' ? '4px 12px 12px 12px' : '12px 4px 12px 12px',
+                    lineHeight: 1.55,
+                    borderRadius: msg.sender === 'bot' ? '4px 16px 16px 16px' : '16px 4px 16px 16px',
                   }}
                 >
                   {msg.text}
                 </div>
               </div>
             ))}
+            {chatLoading && (
+              <div className="flex gap-2 justify-start">
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                  style={{ background: '#1C2B4A' }}
+                >
+                  <Bot size={14} className="text-yellow-400" />
+                </div>
+                <div className="px-3.5 py-2.5 rounded-2xl bg-[#EEF1F7] flex items-center gap-2" style={{ fontSize: '13px', color: '#3D4F6B' }}>
+                  <Loader2 size={14} className="animate-spin flex-shrink-0" />
+                  <span>जवाब आ रहा है...</span>
+                </div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
           </div>
 
-          <div className="p-3 border-t" style={{ borderColor: '#EEF1F7' }}>
+          <div className="p-3 border-t flex-shrink-0" style={{ borderColor: '#EEF1F7' }}>
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
                 placeholder="प्रश्न पूछें... Ask a question..."
-                className="flex-1 px-3 py-2.5 border rounded-lg focus:outline-none"
+                disabled={chatLoading}
+                className="flex-1 px-3 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#003380]/30"
                 style={{ borderColor: '#D8DDE8', fontSize: '13px' }}
               />
               <button
                 onClick={sendMessage}
-                className="p-2.5 rounded-lg text-white transition-all hover:opacity-90"
-                style={{ background: '#003380' }}
+                disabled={chatLoading || !chatInput.trim()}
+                className="p-2.5 rounded-xl text-white transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                style={{ background: '#003380', minWidth: '42px' }}
               >
-                <Send size={15} />
+                {chatLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
               </button>
             </div>
+            {ollamaStatus === 'offline' && (
+              <p className="mt-1.5 text-amber-600" style={{ fontSize: '11px' }}>
+                Start Ollama locally (ollama run llama3.2) for AI replies.
+              </p>
+            )}
           </div>
         </div>
       </div>
