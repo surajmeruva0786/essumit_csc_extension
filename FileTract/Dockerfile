@@ -1,36 +1,29 @@
-# Use an official Python runtime as the base image
+# FileTract — OCR + LLM extraction backend (Tesseract + Flask)
 FROM python:3.11-slim
 
-# Set working directory
-WORKDIR /app
-
-# Install system dependencies including Tesseract OCR
-RUN apt-get update && apt-get install -y \
+# Install Tesseract OCR and system deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-eng \
-    libgl1 \
+    libgl1-mesa-glx \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Set Tesseract path environment variable (CRITICAL - must be before COPY)
-ENV TESSERACT_CMD=/usr/bin/tesseract
-ENV FLASK_ENV=production
+WORKDIR /app
 
-# Copy requirements first for better caching
+# Copy requirements first for better layer caching
 COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-
-# Copy the rest of the application
+# Copy application code (from FileTract directory)
 COPY . .
 
-# Create necessary directories
+# Create dirs for uploads and results
 RUN mkdir -p uploads results
 
-# Expose port (Render will override with PORT env var)
+# Env vars (override at run): GROQ_API_KEY, GEMINI_API_KEY, PORT
+ENV PORT=5000
 EXPOSE 5000
 
-# Run the application with gunicorn
-CMD gunicorn app:app --bind 0.0.0.0:$PORT
+# Run with gunicorn for production
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 2 --timeout 120 app:app"]

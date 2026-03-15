@@ -1,6 +1,56 @@
-extension_frontend/dist
-extension_frontend/node_modules
-csc_extension_dashboard_frontend/node_modules
-csc_extension_dashboard_frontend/dist
-csc_desktop_application_frontend/dist
-csc_desktop_application_frontend/node_modules
+# ── Node / npm ────────────────────────────────────────────────────────────────
+node_modules/
+extension_frontend/node_modules/
+extension_frontend/dist/
+csc_extension_dashboard_frontend/node_modules/
+csc_extension_dashboard_frontend/dist/
+csc_desktop_application_frontend/node_modules/
+csc_desktop_application_frontend/dist/
+csc_desktop_application_frontend/release/
+
+# ── Python / FileTract ────────────────────────────────────────────────────────
+FileTract/venv/
+FileTract/__pycache__/
+FileTract/uploads/
+FileTract/results/
+FileTract/*.db
+FileTract/*.log
+FileTract/error.txt
+FileTract/output.txt
+__pycache__/
+
+# ── Heavy binary / data files ─────────────────────────────────────────────────
+*.pkl
+*.csv
+*.wasm
+*.wasm.js
+tesseract.min.js
+tesseract-core-simd-lstm.wasm.js
+worker.min.js
+csc_desktop_imgs/
+
+# ── Build artefacts ───────────────────────────────────────────────────────────
+extension-pack/
+csc-sahayak-extension.zip
+*.zip
+electron-build.log
+output.txt
+fix_panel.py
+inspect_db.py
+
+# ── Test / sample documents ───────────────────────────────────────────────────
+FileTract/*.pdf
+FileTract/*.png
+FileTract/*.jpg
+FileTract/*.jpeg
+FileTract/*_extracted.json
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+.env
+FileTract/.env
+*.env
+
+# ── OS / Editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/

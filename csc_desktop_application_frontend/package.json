@@ -1,11 +1,38 @@
 {
-  "name": "@figma/my-make-file",
+  "name": "csc-sahayak-desktop",
   "private": true,
-  "version": "0.0.1",
+  "version": "1.0.0",
+  "description": "CSC Sahayak Desktop — Document & Application Manager",
+  "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "electron:build": "vite build && electron-builder",
+    "dist": "npm run electron:build"
+  },
+  "build": {
+    "appId": "com.csc.sahayak.desktop",
+    "productName": "CSC Sahayak Desktop",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": ["portable"],
+      "icon": "public/favicon.ico",
+      "forceCodeSigning": false,
+      "signingHashAlgorithms": null
+    },
+    "publish": null,
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -67,8 +94,13 @@
   "devDependencies": {
     "@tailwindcss/vite": "4.1.12",
     "@vitejs/plugin-react": "4.7.0",
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
     "tailwindcss": "4.1.12",
-    "vite": "6.3.5"
+    "vite": "6.3.5",
+    "wait-on": "^8.0.1"
   },
   "peerDependencies": {
     "react": "18.3.1",

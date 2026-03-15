@@ -268,6 +268,17 @@ Configure Firestore or other data source if the dashboard expects live sessions/
 
 ---
 
+## Deployment
+
+For full deployment steps (Chrome Extension, FileTract, Desktop app installers, Dashboard), see **[DEPLOY.md](DEPLOY.md)**.
+
+- **Extension:** Build `extension_frontend`, run `scripts/pack-extension.ps1` (Windows) to create the zip; upload to Chrome Web Store or distribute internally.
+- **FileTract:** Use the `FileTract/Dockerfile` (Docker) or run on a VPS with gunicorn; set `GROQ_API_KEY` and `GEMINI_API_KEY`.
+- **Desktop app:** Run `npm run electron:build` in `csc_desktop_application_frontend` to produce installers in `release/`; distribute the `.exe` / `.dmg`.
+- **Dashboard:** Build then deploy the `dist/` folder to Vercel, Netlify, or any static host (see `csc_extension_dashboard_frontend/vercel.json`).
+
+---
+
 ## Permissions & Security
 
 - **Extension (manifest):** `activeTab`, `scripting`, `storage`, `tabs`, `sidePanel`, `alarms`; host permissions for `<all_urls>`, Groq, and `http://localhost:5000`. CSP restricts extension pages to approved script and connect sources.
