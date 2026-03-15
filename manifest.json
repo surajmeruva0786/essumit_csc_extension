@@ -16,11 +16,10 @@
     "https://api.groq.com/*",
     "https://cdn.jsdelivr.net/*",
     "https://unpkg.com/*",
-    "http://127.0.0.1:5000/*",
-    "http://localhost:5000/*"
+    "https://essumit-csc-extension.onrender.com/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' http://127.0.0.1:5000 http://localhost:5000 https://*.googleapis.com https://*.firebaseio.com https://*.cloudfunctions.net wss://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://api.groq.com"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://essumit-csc-extension.onrender.com https://*.googleapis.com https://*.firebaseio.com https://*.cloudfunctions.net wss://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://api.groq.com"
   },
   "background": {
     "service_worker": "background.js"

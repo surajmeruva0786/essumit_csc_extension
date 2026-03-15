@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "description": "CSC Sahayak Desktop — Document & Application Manager",
+  "author": "CSC Sahayak",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
@@ -22,6 +23,7 @@
       "dist/**/*",
       "electron/**/*"
     ],
+    "asar": false,
     "win": {
       "target": ["portable"],
       "icon": "public/favicon.ico",

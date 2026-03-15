@@ -4,7 +4,7 @@
 import type { Service } from '../config/services';
 import { getServiceConfig } from '../config/serviceConfig';
 
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = 'https://essumit-csc-extension.onrender.com';
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 120;
 
