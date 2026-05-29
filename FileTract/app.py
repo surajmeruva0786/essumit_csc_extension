@@ -10,6 +10,8 @@ import uuid
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
 import threading
@@ -29,6 +31,13 @@ FRONTEND_DIST = os.path.join(BASE_DIR, "..", "extension_frontend", "dist")
 
 app = Flask(__name__, static_folder=FRONTEND_DIST, static_url_path="")
 CORS(app)
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    default_limits=[os.environ.get("RATELIMIT_DEFAULT", "200 per hour")],
+    storage_uri=os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
+    enabled=os.environ.get("RATELIMIT_ENABLED", "true").lower() != "false",
+)
 
 # Configuration
 UPLOAD_FOLDER = 'uploads'
@@ -250,6 +259,7 @@ def index():
     return send_from_directory('filetract_web', 'index.html')
 
 @app.route('/api/upload', methods=['POST'])
+@limiter.limit(os.environ.get("RATELIMIT_UPLOAD", "20 per minute"))
 def upload_file():
     """Upload document(s) for processing - supports multiple files"""
     if 'files' not in request.files and 'file' not in request.files:
@@ -301,6 +311,7 @@ def upload_file():
         })
 
 @app.route('/api/extract', methods=['POST'])
+@limiter.limit(os.environ.get("RATELIMIT_EXTRACT", "30 per minute"))
 def extract_fields():
     """Extract fields using patent or standard pipeline"""
     data = request.json
@@ -335,6 +346,7 @@ def extract_fields():
     })
 
 @app.route('/api/extract/batch', methods=['POST'])
+@limiter.limit(os.environ.get("RATELIMIT_EXTRACT_BATCH", "10 per minute"))
 def extract_fields_batch():
     """Extract fields from multiple documents with same configuration"""
     data = request.json
@@ -450,6 +462,7 @@ def health_check():
     })
 
 @app.route('/api/validate_field', methods=['POST'])
+@limiter.limit(os.environ.get("RATELIMIT_VALIDATE_FIELD", "60 per minute"))
 def validate_field():
     """Validate a single extracted field using local Ollama and the Knowledge Base"""
     data = request.json
