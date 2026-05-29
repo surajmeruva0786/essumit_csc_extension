@@ -10,6 +10,7 @@ numpy>=1.24.0
 Flask>=3.0.0
 Flask-CORS>=4.0.0
 Flask-Limiter>=3.8.0
+redis>=5.0.0
 gunicorn>=21.0.0
 groq>=0.4.0
 requests>=2.31.0
