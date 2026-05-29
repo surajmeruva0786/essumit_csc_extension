@@ -4,7 +4,10 @@ import os
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
+from cache_utils import cache
+
 DB_PATH = os.path.join(os.path.dirname(__file__), 'desktop_apps.db')
+CACHE_PREFIX = "filetract:local_db"
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -79,9 +82,14 @@ def save_application(app_data: Dict[str, Any]) -> str:
     
     conn.commit()
     conn.close()
+    cache.delete_pattern(f"{CACHE_PREFIX}:*")
     return app_id
 
 def get_all_applications() -> List[Dict[str, Any]]:
+    return cache.get_or_set(f"{CACHE_PREFIX}:applications:all", _get_all_applications_from_db)
+
+
+def _get_all_applications_from_db() -> List[Dict[str, Any]]:
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM applications ORDER BY date DESC, id DESC")
@@ -123,9 +131,14 @@ def stage_application_for_sync(app_id: str) -> bool:
     
     conn.commit()
     conn.close()
+    cache.delete_pattern(f"{CACHE_PREFIX}:*")
     return True
 
 def get_staged_sync() -> Optional[Dict[str, Any]]:
+    return cache.get_or_set(f"{CACHE_PREFIX}:sync:staged", _get_staged_sync_from_db)
+
+
+def _get_staged_sync_from_db() -> Optional[Dict[str, Any]]:
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -164,3 +177,4 @@ def clear_staged_sync():
     cursor.execute("UPDATE sync_stage SET staged_application_id = NULL WHERE id = 1")
     conn.commit()
     conn.close()
+    cache.delete_pattern(f"{CACHE_PREFIX}:*")
