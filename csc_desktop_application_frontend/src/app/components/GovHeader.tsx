@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState , useEffect} from 'react';
 import { Link, useNavigate, useLocation } from 'react-router';
 import { AshokChakra } from './AshokChakra';
 import cgLogo from '../../assets/cg.png';
@@ -20,6 +20,12 @@ interface GovHeaderProps {
 export function GovHeader({ isLoggedIn = false, operatorName = 'राजेश कुमार साहू' }: GovHeaderProps) {
   const [fontSize, setFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
   const [highContrast, setHighContrast] = useState(false);
+  
+  useEffect(() => {
+  const sizes = { normal: '16px', large: '18px', xlarge: '20px' };
+  document.documentElement.style.fontSize = sizes[fontSize];
+}, [fontSize]);
+
   const navigate = useNavigate();
   const location = useLocation();
 
