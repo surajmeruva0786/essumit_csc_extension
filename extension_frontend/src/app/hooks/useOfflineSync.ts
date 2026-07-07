@@ -1,10 +1,36 @@
 import { useState, useCallback } from 'react';
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_API_KEY = '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';
 const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
 
-declare const chrome: { tabs?: any; runtime?: { lastError?: { message?: string } } };
+declare const chrome: any;
+
+function getBackendUrl(): Promise<string> {
+  return new Promise((resolve) => {
+    const chromeGlobal = typeof chrome !== 'undefined' ? chrome : (window as any).chrome;
+    if (chromeGlobal?.storage?.local) {
+      chromeGlobal.storage.local.get(['backendUrl'], (items: any) => {
+        resolve(items.backendUrl || 'https://essumit-csc-extension.onrender.com');
+      });
+    } else {
+      resolve('https://essumit-csc-extension.onrender.com');
+    }
+  });
+}
+
+function getApiKey(): Promise<string> {
+  return new Promise((resolve) => {
+    const chromeGlobal = typeof chrome !== 'undefined' ? chrome : (window as any).chrome;
+    if (chromeGlobal?.storage?.local) {
+      chromeGlobal.storage.local.get(['groqApiKey', 'GROQ_API_KEY'], (items: any) => {
+        const key = items.groqApiKey || items.GROQ_API_KEY || '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';
+        resolve(key?.trim() || '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');
+      });
+    } else {
+      resolve('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');
+    }
+  });
+}
 
 function sendToContentScript(message: Record<string, unknown>): Promise<any> {
   return new Promise((resolve) => {
@@ -63,11 +89,12 @@ function sendToContentScript(message: Record<string, unknown>): Promise<any> {
 }
 
 async function callGroq(systemPrompt: string, userPrompt: string): Promise<string | null> {
+  const apiKey = await getApiKey();
   for (const model of GROQ_MODELS) {
     try {
       const res = await fetch(GROQ_API_URL, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model,
           messages: [
@@ -109,7 +136,8 @@ export function useOfflineSync() {
     setSyncMsg('Backend से data fetch हो रही है...');
 
     try {
-      const backendRes = await fetch('http://127.0.0.1:5000/api/sync/get_staged');
+      const activeBackendUrl = await getBackendUrl();
+      const backendRes = await fetch(`${activeBackendUrl}/api/sync/get_staged`);
       if (!backendRes.ok) throw new Error('Backend unreachable');
       const backendData = await backendRes.json();
 
@@ -278,7 +306,7 @@ Return a JSON array of fill instructions. For dropdowns use the exact option "va
 
       const filled = fillResult?.filledCount ?? fillInstructions.length;
 
-      await fetch('http://127.0.0.1:5000/api/sync/clear', { method: 'POST' });
+      await fetch(`${activeBackendUrl}/api/sync/clear`, { method: 'POST' });
 
       setSyncState('success');
       setSyncMsg(`✅ ${filled} fields filled! (${appData.name || 'Citizen'})`);
