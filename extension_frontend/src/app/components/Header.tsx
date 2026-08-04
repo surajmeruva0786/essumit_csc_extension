@@ -1,5 +1,8 @@
-import { Building2, Circle, Bot, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Building2, Circle, Bot, RefreshCw, CheckCircle, AlertCircle, ChevronDown, Cloud, Laptop, Check } from 'lucide-react';
 import { useOfflineSync } from '../hooks/useOfflineSync';
+
+declare const chrome: any;
 
 interface HeaderProps {
   onOpenAI: () => void;
@@ -7,6 +10,71 @@ interface HeaderProps {
 
 export default function Header({ onOpenAI }: HeaderProps) {
   const { syncState, syncMsg, triggerSync } = useOfflineSync();
+  const [activeUrl, setActiveUrl] = useState<string>('https://essumit-csc-extension.onrender.com');
+  const [status, setStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Load backendUrl on mount
+  useEffect(() => {
+    const chromeGlobal = typeof chrome !== 'undefined' ? chrome : (window as any).chrome;
+    if (chromeGlobal?.storage?.local) {
+      chromeGlobal.storage.local.get(['backendUrl'], (items: any) => {
+        if (items.backendUrl) {
+          setActiveUrl(items.backendUrl);
+        }
+      });
+    }
+  }, []);
+
+  // Periodic health check ping
+  useEffect(() => {
+    let active = true;
+    const checkConnection = async () => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch(`${activeUrl}/api/health`, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (res.status === 200 && active) {
+          setStatus('online');
+        } else if (active) {
+          setStatus('offline');
+        }
+      } catch (err) {
+        if (active) setStatus('offline');
+      }
+    };
+
+    checkConnection();
+    const interval = setInterval(checkConnection, 15000); // Check every 15s
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [activeUrl]);
+
+  // Click outside listener to close dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSelectBackend = (url: string) => {
+    setActiveUrl(url);
+    setIsDropdownOpen(false);
+    setStatus('checking');
+    const chromeGlobal = typeof chrome !== 'undefined' ? chrome : (window as any).chrome;
+    if (chromeGlobal?.storage?.local) {
+      chromeGlobal.storage.local.set({ backendUrl: url });
+    }
+  };
 
   const syncTitle =
     syncState === 'loading'
@@ -53,9 +121,74 @@ export default function Header({ onOpenAI }: HeaderProps) {
           <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green rounded-full border-2 border-navy"></div>
         </button>
 
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-green/10 border border-green/20">
-          <Circle className="w-1.5 h-1.5 fill-green text-green animate-pulse" />
-          <span className="text-[11px] font-medium text-green">Online</span>
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-md border text-[11px] font-semibold transition-all duration-200 cursor-pointer ${
+              status === 'online'
+                ? 'bg-green/10 border-green/20 text-green hover:bg-green/20'
+                : status === 'checking'
+                  ? 'bg-amber-400/10 border-amber-400/20 text-amber-400 hover:bg-amber-400/20'
+                  : 'bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20'
+            }`}
+            title={`Active API: ${activeUrl}`}
+          >
+            <Circle className={`w-1.5 h-1.5 ${
+              status === 'online'
+                ? 'fill-green text-green animate-pulse'
+                : status === 'checking'
+                  ? 'fill-amber-400 text-amber-400 animate-bounce'
+                  : 'fill-red-500 text-red-500'
+            }`} />
+            <span>
+              {status === 'online'
+                ? activeUrl.includes('localhost') || activeUrl.includes('127.0.0.1')
+                  ? 'Local'
+                  : 'Cloud'
+                : status === 'checking'
+                  ? 'Checking...'
+                  : 'Offline'}
+            </span>
+            <ChevronDown className="w-2.5 h-2.5 opacity-60" />
+          </button>
+
+          {isDropdownOpen && (
+            <div className="absolute right-0 mt-1.5 w-48 bg-navy border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
+              <div className="px-3 py-2 border-b border-white/5 bg-white/5">
+                <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Select API Backend</p>
+              </div>
+              <div className="p-1 space-y-0.5">
+                <button
+                  onClick={() => handleSelectBackend('https://essumit-csc-extension.onrender.com')}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-left text-xs transition-colors duration-150 cursor-pointer ${
+                    activeUrl === 'https://essumit-csc-extension.onrender.com'
+                      ? 'bg-saffron text-navy font-bold'
+                      : 'text-slate-300 hover:bg-white/5'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Cloud className="w-3.5 h-3.5" />
+                    Cloud API (Render)
+                  </span>
+                  {activeUrl === 'https://essumit-csc-extension.onrender.com' && <Check className="w-3 h-3 text-navy" strokeWidth={3} />}
+                </button>
+                <button
+                  onClick={() => handleSelectBackend('http://127.0.0.1:5000')}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-left text-xs transition-colors duration-150 cursor-pointer ${
+                    activeUrl === 'http://127.0.0.1:5000'
+                      ? 'bg-saffron text-navy font-bold'
+                      : 'text-slate-300 hover:bg-white/5'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Laptop className="w-3.5 h-3.5" />
+                    Local API (Localhost)
+                  </span>
+                  {activeUrl === 'http://127.0.0.1:5000' && <Check className="w-3 h-3 text-navy" strokeWidth={3} />}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </header>

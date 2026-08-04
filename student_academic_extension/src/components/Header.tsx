@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router'
 import { Home, CalendarCheck, Bell, BookOpen, BarChart3, Clock, GitCompare, Settings } from 'lucide-react'
+import { useNotifications } from '../app/context/NotificationContext'
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: Home },
@@ -14,6 +15,7 @@ const navItems = [
 
 export default function Header() {
   const location = useLocation()
+  const { unreadCount } = useNotifications()
   return (
     <header className="border-b border-border bg-card">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -30,7 +32,14 @@ export default function Header() {
                   isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'
                 }`}
               >
-                <Icon size={16} />
+                <span className="relative flex items-center">
+                  <Icon size={16} />
+                  {item.path === '/notifications' && unreadCount > 0 && (
+                    <span className="absolute -top-2 -right-2 min-w-[16px] h-4 px-1 flex items-center justify-center text-[10px] leading-none rounded-full bg-red-500 text-white">
+                      {unreadCount}
+                    </span>
+                  )}
+                </span>
                 {item.label}
               </Link>
             )
