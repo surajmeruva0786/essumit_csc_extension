@@ -590,16 +590,18 @@ export default function Layout() {
               भारत सरकार · Government of India · MeitY · CSC e-Governance
             </Typography>
             <Typography
-              noWrap
-              sx={{
-                fontSize: "15px",
-                fontWeight: 700,
-                color: isDark ? "#e2e8f0" : GOV.navy,
-                lineHeight: 1.3,
-              }}
-            >
-              CSC AI Co-Pilot Monitoring Dashboard
-            </Typography>
+  noWrap
+  sx={{
+    fontSize: "15px",
+    fontWeight: 700,
+    color: isDark ? "#e2e8f0" : GOV.navy,
+    lineHeight: 1.3,
+  }}
+>
+  {currentTab === false || currentTab === 0
+    ? "CSC AI Co-Pilot Monitoring Dashboard"
+    : navItems[currentTab as number].label}
+</Typography>
           </Box>
 
           {/* Styled Search (template pattern) */}
