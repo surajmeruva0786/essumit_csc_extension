@@ -4,7 +4,21 @@
 import type { Service } from '../config/services';
 import { getServiceConfig } from '../config/serviceConfig';
 
-const API_BASE_URL = 'https://essumit-csc-extension.onrender.com';
+declare const chrome: any;
+
+function getApiBaseUrl(): Promise<string> {
+  return new Promise((resolve) => {
+    const chromeGlobal = typeof chrome !== 'undefined' ? chrome : (window as any).chrome;
+    if (chromeGlobal?.storage?.local) {
+      chromeGlobal.storage.local.get(['backendUrl'], (items: any) => {
+        resolve(items.backendUrl || 'https://essumit-csc-extension.onrender.com');
+      });
+    } else {
+      resolve('https://essumit-csc-extension.onrender.com');
+    }
+  });
+}
+
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 120;
 
@@ -35,9 +49,10 @@ async function uploadFiles(files: File[]): Promise<string[]> {
   const formData = new FormData();
   files.forEach((file) => formData.append('files', file, file.name));
 
+  const apiBaseUrl = await getApiBaseUrl();
   let resp: Response;
   try {
-    resp = await fetch(`${API_BASE_URL}/api/upload`, {
+    resp = await fetch(`${apiBaseUrl}/api/upload`, {
       method: 'POST',
       body: formData,
     });
@@ -68,7 +83,8 @@ async function uploadFiles(files: File[]): Promise<string[]> {
 }
 
 async function startExtraction(jobIds: string[], fields: string[]): Promise<void> {
-  const resp = await fetch(`${API_BASE_URL}/api/extract/batch`, {
+  const apiBaseUrl = await getApiBaseUrl();
+  const resp = await fetch(`${apiBaseUrl}/api/extract/batch`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -84,6 +100,7 @@ async function startExtraction(jobIds: string[], fields: string[]): Promise<void
 
 async function waitForResults(jobIds: string[], serviceType: string): Promise<ExtractionResult> {
   const allResults: any[] = [];
+  const apiBaseUrl = await getApiBaseUrl();
 
   for (const jobId of jobIds) {
     let attempts = 0;
@@ -91,11 +108,11 @@ async function waitForResults(jobIds: string[], serviceType: string): Promise<Ex
     while (!done && attempts < MAX_POLL_ATTEMPTS) {
       attempts += 1;
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-      const statusResp = await fetch(`${API_BASE_URL}/api/status/${jobId}`);
+      const statusResp = await fetch(`${apiBaseUrl}/api/status/${jobId}`);
       if (!statusResp.ok) continue;
       const statusData = await statusResp.json();
       if (statusData.status === 'complete') {
-        const resultResp = await fetch(`${API_BASE_URL}/api/result/${jobId}`);
+        const resultResp = await fetch(`${apiBaseUrl}/api/result/${jobId}`);
         if (resultResp.ok) {
           const finalData = await resultResp.json();
           if (finalData.results && finalData.results.extracted_fields) {
