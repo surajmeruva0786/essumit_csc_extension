@@ -1,11 +1,38 @@
 import { Box, Typography, alpha } from "@mui/material";
+import {
+  FaFacebookF,
+  FaYoutube,
+  FaInstagram,
+  FaLinkedinIn,
+} from "react-icons/fa";
 
+import { FaXTwitter } from "react-icons/fa6";
 const socialLinks = [
-  { label: "X", href: "https://twitter.com/CSCegov" },
-  { label: "FB", href: "https://facebook.com/CSCeGov" },
-  { label: "YT", href: "https://youtube.com/@CSCegov" },
-  { label: "IG", href: "https://instagram.com/CSCegov" },
-  { label: "LN", href: "https://linkedin.com/company/csc-egov" },
+  {
+    label: <FaXTwitter />,
+    href: "https://twitter.com/CSCegov",
+    ariaLabel: "X",
+  },
+  {
+    label: <FaFacebookF />,
+    href: "https://facebook.com/CSCeGov",
+    ariaLabel: "Facebook",
+  },
+  {
+    label: <FaYoutube />,
+    href: "https://youtube.com/@CSCegov",
+    ariaLabel: "YouTube",
+  },
+  {
+    label: <FaInstagram />,
+    href: "https://instagram.com/CSCegov",
+    ariaLabel: "Instagram",
+  },
+  {
+    label: <FaLinkedinIn />,
+    href: "https://linkedin.com/company/csc-egov",
+    ariaLabel: "LinkedIn",
+  },
 ];
 
 interface Props {
@@ -83,14 +110,15 @@ export default function DashboardFooter({ isDark }: Props) {
 
         {/* Social Media */}
         {socialLinks.map((s, i, arr) => (
-          <Box key={s.label} sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+          <Box key={s.ariaLabel}  sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
             <Typography
               component="a"
               href={s.href}
+              aria-label={s.ariaLabel}
               target="_blank"
               rel="noopener noreferrer"
               sx={{
-                fontSize: "11px",
+                fontSize: "13px",
                 color: alpha(GOV.white, 0.6),
                 cursor: "pointer",
                 textDecoration: "none",
