@@ -12,6 +12,16 @@ chrome.alarms.onAlarm.addListener((alarm) => {
       }
     })
   }
+
+  if (alarm.name === 'nextClassReminder') {
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'icons/icon48.png',
+      title: 'Class Reminder',
+      message: 'Your next class starts in 10 minutes!',
+      priority: 2
+    })
+  }
 })
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
