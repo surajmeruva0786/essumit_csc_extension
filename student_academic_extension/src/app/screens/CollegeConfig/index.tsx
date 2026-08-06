@@ -18,7 +18,7 @@ export default function CollegeConfigScreen() {
     notifications: true,
     timetable: true,
     cgpa: true,
-    sessionRecovery: true,
+    performanceInsights: true,
   })
 
   const activeCollege = colleges.find((c) => c.id === activeCollegeId)
@@ -39,7 +39,7 @@ export default function CollegeConfigScreen() {
         notifications: newCollege.notifications,
         timetable: newCollege.timetable,
         cgpa: newCollege.cgpa,
-        sessionRecovery: newCollege.sessionRecovery,
+        performanceInsights: newCollege.performanceInsights,
       },
       selectors: {
         attendance: '',
@@ -58,7 +58,7 @@ export default function CollegeConfigScreen() {
       notifications: true,
       timetable: true,
       cgpa: true,
-      sessionRecovery: true,
+      performanceInsights: true,
     })
     setShowAddForm(false)
   }
@@ -73,7 +73,7 @@ export default function CollegeConfigScreen() {
     }
   }
 
-  const features = ['attendance', 'assignments', 'notifications', 'timetable', 'cgpa', 'sessionRecovery'] as FeatureKey[]
+  const features = ['attendance', 'assignments', 'notifications', 'timetable', 'cgpa', 'performanceInsights'] as FeatureKey[]
 
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-6">

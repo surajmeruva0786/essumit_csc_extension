@@ -10,7 +10,7 @@ import Timetable from './app/screens/Timetable'
 import SemesterComparison from './app/screens/SemesterComparison'
 import QuickActions from './app/screens/QuickActions'
 import CollegeConfigScreen from './app/screens/CollegeConfig'
-import SessionRecovery from './app/screens/SessionRecovery'
+import SubjectPerformanceInsights from './app/screens/SubjectPerformanceInsights'
 import { CollegeConfigProvider } from './app/context/CollegeConfigContext'
 
 export default function App() {
@@ -26,7 +26,7 @@ export default function App() {
           <Route path="/cgpa" element={<CgpaTracker />} />
           <Route path="/timetable" element={<Timetable />} />
           <Route path="/comparison" element={<SemesterComparison />} />
-          <Route path="/session-recovery" element={<SessionRecovery />} />
+          <Route path="/insights" element={<SubjectPerformanceInsights />} />
           <Route path="/quick-actions" element={<QuickActions />} />
           <Route path="/college-config" element={<CollegeConfigScreen />} />
         </Route>
