@@ -10,7 +10,7 @@ export interface FeatureFlags {
   notifications: boolean
   timetable: boolean
   cgpa: boolean
-  sessionRecovery: boolean
+  smartBookmarking: boolean
 }
 
 export interface Selectors {
@@ -53,7 +53,7 @@ export const defaultColleges: CollegeConfig[] = [
       notifications: true,
       timetable: true,
       cgpa: true,
-      sessionRecovery: true,
+      smartBookmarking: true,
     },
     selectors: {
       attendance: '#attendance-table',
@@ -77,7 +77,7 @@ export const defaultColleges: CollegeConfig[] = [
       notifications: true,
       timetable: false,
       cgpa: true,
-      sessionRecovery: true,
+      smartBookmarking: true,
     },
     selectors: {
       attendance: '.attendance-section',
