@@ -1,20 +1,12 @@
 import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
-import { Download, Bell, BellOff } from 'lucide-react'
-import { DayPicker } from 'react-day-picker'
-import { format } from 'date-fns'
+import { Calendar, Filter, Download } from 'lucide-react'
 
-const SUBJECTS = ['All', 'DS', 'DBMS', 'OS', 'CN', 'SE', 'AI', 'ML']
-
-const mockAssignments = [
-  { id: 1, title: 'Data Structures Assignment', subject: 'DS', due: '2026-07-05', status: 'completed' },
-  { id: 2, title: 'DBMS Quiz', subject: 'DBMS', due: '2026-07-10', status: 'completed' },
-  { id: 3, title: 'OS Lab Report', subject: 'OS', due: '2026-07-12', status: 'overdue' },
-  { id: 4, title: 'CN Assignment', subject: 'CN', due: '2026-07-18', status: 'upcoming' },
-  { id: 5, title: 'Data Structures Lab', subject: 'DS', due: '2026-07-20', status: 'upcoming' },
-  { id: 6, title: 'DBMS Assignment 3', subject: 'DBMS', due: '2026-07-22', status: 'upcoming' },
-  { id: 7, title: 'OS Mini Project', subject: 'OS', due: '2026-07-25', status: 'upcoming' },
-  { id: 8, title: 'CN Report', subject: 'CN', due: '2026-07-30', status: 'upcoming' },
+const assignments = [
+  { id: 1, title: 'Data Structures Lab', subject: 'DS', due: '2026-07-20', status: 'pending' },
+  { id: 2, title: 'DBMS Assignment 3', subject: 'DBMS', due: '2026-07-22', status: 'pending' },
+  { id: 3, title: 'OS Mini Project', subject: 'OS', due: '2026-07-25', status: 'pending' },
+  { id: 4, title: 'CN Report', subject: 'CN', due: '2026-07-18', status: 'overdue' },
 ]
 
 type Status = 'completed' | 'upcoming' | 'overdue'
@@ -77,64 +69,6 @@ function generateICS(assignments: typeof mockAssignments) {
 }
 
 export default function AssignmentCalendar() {
-  const [subjectFilter, setSubjectFilter] = useState('All')
-  const [remindersEnabled, setRemindersEnabled] = useState(true)
-  const [selectedMonth, setSelectedMonth] = useState<Date>(new Date(2026, 6, 1))
-
-  const filteredAssignments = useMemo(() => {
-    if (subjectFilter === 'All') return mockAssignments
-    return mockAssignments.filter((a) => a.subject === subjectFilter)
-  }, [subjectFilter])
-
-  const overdueDates = useMemo(
-    () => filteredAssignments.filter((a) => getStatus(a.due, a.status) === 'overdue').map((a) => new Date(a.due)),
-    [filteredAssignments]
-  )
-  const upcomingDates = useMemo(
-    () => filteredAssignments.filter((a) => getStatus(a.due, a.status) === 'upcoming').map((a) => new Date(a.due)),
-    [filteredAssignments]
-  )
-  const completedDates = useMemo(
-    () => filteredAssignments.filter((a) => getStatus(a.due, a.status) === 'completed').map((a) => new Date(a.due)),
-    [filteredAssignments]
-  )
-
-  const upcomingAssignments = useMemo(() => {
-    return filteredAssignments
-      .filter((a) => getStatus(a.due, a.status) !== 'completed')
-      .sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())
-  }, [filteredAssignments])
-
-  const handleExport = () => {
-    const ics = generateICS(filteredAssignments)
-    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'assignments.ics'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-  }
-
-  const getAssignmentByDate = (date: Date) => {
-    const dateStr = format(date, 'yyyy-MM-dd')
-    return filteredAssignments.find((a) => a.due === dateStr)
-  }
-
-  const modifiers = {
-    overdue: overdueDates,
-    upcoming: upcomingDates,
-    completed: completedDates,
-  }
-
-  const modifiersClassNames = {
-    overdue: 'bg-red-100 text-red-700 rounded-full',
-    upcoming: 'bg-yellow-100 text-yellow-700 rounded-full',
-    completed: 'bg-green-100 text-green-700 rounded-full',
-  }
-
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
