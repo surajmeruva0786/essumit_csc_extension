@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router'
-import { Home, CalendarCheck, Bell, BookOpen, BarChart3, Clock, GitCompare, Settings, RefreshCw } from 'lucide-react'
+import { Home, CalendarCheck, Bell, BookOpen, BarChart3, Clock, GitCompare, Settings, Calendar } from 'lucide-react'
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: Home },
@@ -10,7 +10,7 @@ const navItems = [
   { path: '/cgpa', label: 'CGPA', icon: BarChart3 },
   { path: '/timetable', label: 'Timetable', icon: Clock },
   { path: '/comparison', label: 'Comparison', icon: GitCompare },
-  { path: '/session-recovery', label: 'Recovery', icon: RefreshCw },
+  { path: '/countdown', label: 'Countdown', icon: Calendar },
 ]
 
 export default function Header() {
