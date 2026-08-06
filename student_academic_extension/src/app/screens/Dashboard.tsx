@@ -11,6 +11,7 @@ const widgets = [
   { title: 'CGPA Tracker', desc: 'Monitor semester performance', icon: BarChart3, to: '/cgpa', color: 'text-orange-500' },
   { title: 'Timetable', desc: 'Daily class schedule', icon: Clock, to: '/timetable', color: 'text-teal-500' },
   { title: 'Comparison', desc: 'Semester-wise analysis', icon: GitCompare, to: '/comparison', color: 'text-pink-500' },
+  { title: 'Session Recovery', desc: 'Automatic session recovery', icon: RefreshCw, to: '/session-recovery', color: 'text-emerald-500' },
 ]
 
 export default function Dashboard() {
