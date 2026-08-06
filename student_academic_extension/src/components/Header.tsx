@@ -12,6 +12,7 @@ const navItems = [
   { path: '/cgpa', label: 'CGPA', icon: BarChart3 },
   { path: '/timetable', label: 'Timetable', icon: Clock },
   { path: '/comparison', label: 'Comparison', icon: GitCompare },
+  { path: '/session-recovery', label: 'Recovery', icon: RefreshCw },
 ]
 
 const themeOptions = [
