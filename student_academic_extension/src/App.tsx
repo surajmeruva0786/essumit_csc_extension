@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router'
+import { ThemeProvider } from './app/context/ThemeContext'
 import Layout from './components/Layout'
 import Dashboard from './app/screens/Dashboard'
 import AttendanceTrends from './app/screens/AttendanceTrends'
@@ -8,14 +9,10 @@ import PersonalizedDashboard from './app/screens/PersonalizedDashboard'
 import CgpaTracker from './app/screens/CgpaTracker'
 import Timetable from './app/screens/Timetable'
 import SemesterComparison from './app/screens/SemesterComparison'
-import QuickActions from './app/screens/QuickActions'
-import CollegeConfigScreen from './app/screens/CollegeConfig'
-import SessionRecovery from './app/screens/SessionRecovery'
-import { CollegeConfigProvider } from './app/context/CollegeConfigContext'
 
 export default function App() {
   return (
-    <CollegeConfigProvider>
+    <ThemeProvider>
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Dashboard />} />
@@ -26,11 +23,8 @@ export default function App() {
           <Route path="/cgpa" element={<CgpaTracker />} />
           <Route path="/timetable" element={<Timetable />} />
           <Route path="/comparison" element={<SemesterComparison />} />
-          <Route path="/session-recovery" element={<SessionRecovery />} />
-          <Route path="/quick-actions" element={<QuickActions />} />
-          <Route path="/college-config" element={<CollegeConfigScreen />} />
         </Route>
       </Routes>
-    </CollegeConfigProvider>
+    </ThemeProvider>
   )
 }
