@@ -1,9 +1,10 @@
 import { Card, CardHeader, CardTitle } from '../components/ui/card'
 import { Link } from 'react-router'
-import { CalendarCheck, Bell, BookOpen, Settings, BarChart3, Clock, GitCompare, RefreshCw } from 'lucide-react'
+import { CalendarCheck, Bell, BookOpen, Settings, BarChart3, Clock, GitCompare, Target } from 'lucide-react'
 
 const widgets = [
   { title: 'Attendance Trends', desc: 'Track your attendance over time', icon: CalendarCheck, to: '/attendance', color: 'text-blue-500' },
+  { title: 'Goal Planner', desc: 'Plan your attendance targets', icon: Target, to: '/attendance-goal', color: 'text-indigo-500' },
   { title: 'Notifications', desc: 'Academic updates and alerts', icon: Bell, to: '/notifications', color: 'text-red-500' },
   { title: 'Assignments', desc: 'Upcoming deadlines and calendar', icon: BookOpen, to: '/assignments', color: 'text-green-500' },
   { title: 'My Dashboard', desc: 'Personalized widgets layout', icon: Settings, to: '/dashboard', color: 'text-purple-500' },

@@ -1,16 +1,17 @@
 import { Link, useLocation } from 'react-router'
-import { Home, CalendarCheck, Bell, BookOpen, BarChart3, Clock, GitCompare, Settings, RefreshCw } from 'lucide-react'
+import { Home, CalendarCheck, Bell, BookOpen, BarChart3, Clock, GitCompare, Settings, WifiOff, Target } from 'lucide-react'
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: Home },
   { path: '/attendance', label: 'Attendance', icon: CalendarCheck },
+  { path: '/attendance-goal', label: 'Goal Planner', icon: Target },
   { path: '/notifications', label: 'Notifications', icon: Bell },
   { path: '/assignments', label: 'Assignments', icon: BookOpen },
   { path: '/dashboard', label: 'My Dashboard', icon: Settings },
   { path: '/cgpa', label: 'CGPA', icon: BarChart3 },
   { path: '/timetable', label: 'Timetable', icon: Clock },
   { path: '/comparison', label: 'Comparison', icon: GitCompare },
-  { path: '/session-recovery', label: 'Recovery', icon: RefreshCw },
+  { path: '/offline', label: 'Offline', icon: WifiOff },
 ]
 
 export default function Header() {
