@@ -1,86 +1,12 @@
-import { useState, useEffect, useMemo } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
-import { Clock, MapPin, User, Bell, BellOff, Calendar } from 'lucide-react'
+import { Card, CardContent } from '../components/ui/card'
+import { MapPin, User } from 'lucide-react'
 
-type ClassType = 'lecture' | 'lab' | 'tutorial'
-
-interface ClassSlot {
-  id: string
-  startTime: string
-  endTime: string
-  subject: string
-  room: string
-  faculty: string
-  type: ClassType
-  day?: string
-}
-
-interface DaySchedule {
-  day: string
-  shortDay: string
-  classes: ClassSlot[]
-}
-
-const WEEKLY_TIMETABLE: DaySchedule[] = [
-  {
-    day: 'Monday',
-    shortDay: 'Mon',
-    classes: [
-      { id: 'm1', startTime: '09:00', endTime: '10:00', subject: 'Data Structures', room: 'Room 301', faculty: 'Dr. Smith', type: 'lecture' },
-      { id: 'm2', startTime: '10:00', endTime: '12:00', subject: 'DBMS Lab', room: 'Lab 2', faculty: 'Prof. Johnson', type: 'lab' },
-      { id: 'm3', startTime: '14:00', endTime: '15:00', subject: 'Operating Systems', room: 'Room 205', faculty: 'Dr. Lee', type: 'lecture' },
-      { id: 'm4', startTime: '16:00', endTime: '17:00', subject: 'Soft Skills', room: 'Room 104', faculty: 'Ms. Garcia', type: 'tutorial' },
-    ]
-  },
-  {
-    day: 'Tuesday',
-    shortDay: 'Tue',
-    classes: [
-      { id: 't1', startTime: '09:00', endTime: '10:30', subject: 'Computer Networks', room: 'Room 102', faculty: 'Prof. Davis', type: 'lecture' },
-      { id: 't2', startTime: '11:00', endTime: '12:00', subject: 'Software Engineering', room: 'Room 304', faculty: 'Dr. Wilson', type: 'lecture' },
-      { id: 't3', startTime: '14:00', endTime: '15:00', subject: 'Mathematics', room: 'Room 201', faculty: 'Dr. Brown', type: 'lecture' },
-    ]
-  },
-  {
-    day: 'Wednesday',
-    shortDay: 'Wed',
-    classes: [
-      { id: 'w1', startTime: '09:00', endTime: '10:00', subject: 'Data Structures', room: 'Room 301', faculty: 'Dr. Smith', type: 'lecture' },
-      { id: 'w2', startTime: '10:00', endTime: '12:00', subject: 'DBMS Lab', room: 'Lab 2', faculty: 'Prof. Johnson', type: 'lab' },
-    ]
-  },
-  {
-    day: 'Thursday',
-    shortDay: 'Thu',
-    classes: [
-      { id: 'th1', startTime: '09:00', endTime: '10:30', subject: 'Operating Systems', room: 'Room 205', faculty: 'Dr. Lee', type: 'lecture' },
-      { id: 'th2', startTime: '11:00', endTime: '12:00', subject: 'Computer Networks', room: 'Room 102', faculty: 'Prof. Davis', type: 'lecture' },
-      { id: 'th3', startTime: '14:00', endTime: '15:00', subject: 'Software Engineering', room: 'Room 304', faculty: 'Dr. Wilson', type: 'tutorial' },
-    ]
-  },
-  {
-    day: 'Friday',
-    shortDay: 'Fri',
-    classes: [
-      { id: 'f1', startTime: '09:00', endTime: '10:00', subject: 'Data Structures', room: 'Room 301', faculty: 'Dr. Smith', type: 'lecture' },
-      { id: 'f2', startTime: '10:30', endTime: '11:30', subject: 'Mathematics', room: 'Room 201', faculty: 'Dr. Brown', type: 'lecture' },
-      { id: 'f3', startTime: '13:00', endTime: '14:00', subject: 'Computer Networks', room: 'Room 102', faculty: 'Prof. Davis', type: 'lecture' },
-      { id: 'f4', startTime: '14:30', endTime: '16:00', subject: 'Software Engineering', room: 'Room 304', faculty: 'Dr. Wilson', type: 'tutorial' },
-      { id: 'f5', startTime: '17:00', endTime: '18:00', subject: 'Project Work', room: 'Lab 5', faculty: 'Dr. Smith', type: 'lab' },
-    ]
-  },
-  {
-    day: 'Saturday',
-    shortDay: 'Sat',
-    classes: [
-      { id: 's1', startTime: '09:00', endTime: '12:00', subject: 'Lab Workshop', room: 'Lab 1', faculty: 'Prof. Johnson', type: 'lab' },
-    ]
-  },
-  {
-    day: 'Sunday',
-    shortDay: 'Sun',
-    classes: []
-  }
+const todaySchedule = [
+  { time: '09:00', subject: 'Data Structures', room: 'Room 301', faculty: 'Dr. Smith', type: 'lecture' },
+  { time: '10:00', subject: 'DBMS Lab', room: 'Lab 2', faculty: 'Prof. Johnson', type: 'lab' },
+  { time: '11:30', subject: 'Operating Systems', room: 'Room 205', faculty: 'Dr. Lee', type: 'lecture' },
+  { time: '13:00', subject: 'Computer Networks', room: 'Room 102', faculty: 'Prof. Davis', type: 'lecture' },
+  { time: '14:30', subject: 'Software Engineering', room: 'Room 304', faculty: 'Dr. Wilson', type: 'tutorial' },
 ]
 
 const DAYS_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
