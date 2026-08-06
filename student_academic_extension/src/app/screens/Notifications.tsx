@@ -1,12 +1,5 @@
-import { useState } from 'react'
 import { Card, CardContent } from '../components/ui/card'
-import { CheckCircle2, Circle, Bell, Filter } from 'lucide-react'
-import {
-  useNotifications,
-  CATEGORY_LABELS,
-  CATEGORY_BADGE_CLASSES,
-  type NotificationCategory,
-} from '../context/NotificationContext'
+import { CheckCircle2, Circle, Filter } from 'lucide-react'
 
 type FilterValue = NotificationCategory | 'all'
 

@@ -1,20 +1,23 @@
 import { Routes, Route } from 'react-router'
 import Layout from './components/Layout'
-import { NotificationProvider } from './app/context/NotificationContext'
-import Dashboard from './screens/Dashboard'
-import AttendanceTrends from './screens/AttendanceTrends'
-import Notifications from './screens/Notifications'
-import AssignmentCalendar from './screens/AssignmentCalendar'
-import PersonalizedDashboard from './screens/PersonalizedDashboard'
-import CgpaTracker from './screens/CgpaTracker'
-import Timetable from './screens/Timetable'
-import SemesterComparison from './screens/SemesterComparison'
+import Dashboard from './app/screens/Dashboard'
+import AttendanceTrends from './app/screens/AttendanceTrends'
+import Notifications from './app/screens/Notifications'
+import AssignmentCalendar from './app/screens/AssignmentCalendar'
+import PersonalizedDashboard from './app/screens/PersonalizedDashboard'
+import CgpaTracker from './app/screens/CgpaTracker'
+import Timetable from './app/screens/Timetable'
+import SemesterComparison from './app/screens/SemesterComparison'
+import QuickActions from './app/screens/QuickActions'
+import CollegeConfigScreen from './app/screens/CollegeConfig'
+import SessionRecovery from './app/screens/SessionRecovery'
+import { CollegeConfigProvider } from './app/context/CollegeConfigContext'
 
 export default function App() {
   return (
-    <NotificationProvider>
-      <Layout>
-        <Routes>
+    <CollegeConfigProvider>
+      <Routes>
+        <Route element={<Layout />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/attendance" element={<AttendanceTrends />} />
           <Route path="/notifications" element={<Notifications />} />
@@ -23,8 +26,11 @@ export default function App() {
           <Route path="/cgpa" element={<CgpaTracker />} />
           <Route path="/timetable" element={<Timetable />} />
           <Route path="/comparison" element={<SemesterComparison />} />
-        </Routes>
-      </Layout>
-    </NotificationProvider>
+          <Route path="/session-recovery" element={<SessionRecovery />} />
+          <Route path="/quick-actions" element={<QuickActions />} />
+          <Route path="/college-config" element={<CollegeConfigScreen />} />
+        </Route>
+      </Routes>
+    </CollegeConfigProvider>
   )
 }
