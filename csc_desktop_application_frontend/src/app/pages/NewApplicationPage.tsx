@@ -12,6 +12,9 @@ import i6 from '../../assets/i6.png';
 import i7 from '../../assets/i7.png';
 import i8 from '../../assets/i8.png';
 
+const NAME_REGEX = /^[a-zA-Z\s]{3,}$/;      // letters/spaces, min 3 chars
+const MOBILE_REGEX = /^[6-9]\d{9}$/;         // Indian mobile: starts 6-9, 10 digits
+
 const services = [
   { id: 'birth', emoji: '👶', label: 'जन्म प्रमाण पत्र', labelEn: 'Birth Certificate', docs: 3, days: '7' },
   { id: 'death', emoji: '🕊️', label: 'मृत्यु प्रमाण पत्र', labelEn: 'Death Certificate', docs: 4, days: '7' },
@@ -34,6 +37,7 @@ export function NewApplicationPage() {
   const [citizenName, setCitizenName] = useState('');
   const [citizenPhone, setCitizenPhone] = useState('');
   const [citizenAddress, setCitizenAddress] = useState('');
+  const [formErrors, setFormErrors] = useState<{ citizenName?: string; citizenPhone?: string }>({});
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [chatLoading, setChatLoading] = useState(false);
@@ -74,8 +78,28 @@ export function NewApplicationPage() {
     }
   };
 
+  const validateCitizenDetails = (): boolean => {
+    const newErrors: { citizenName?: string; citizenPhone?: string } = {};
+
+    if (!citizenName.trim()) {
+      newErrors.citizenName = 'नाम आवश्यक है / Name is required';
+    } else if (!NAME_REGEX.test(citizenName.trim())) {
+      newErrors.citizenName = 'नाम कम से कम 3 अक्षर का होना चाहिए / Name must be at least 3 letters';
+    }
+
+    if (!citizenPhone.trim()) {
+      newErrors.citizenPhone = 'मोबाइल नंबर आवश्यक है / Mobile number is required';
+    } else if (!MOBILE_REGEX.test(citizenPhone.trim())) {
+      newErrors.citizenPhone = 'मान्य 10-अंकीय मोबाइल नंबर दर्ज करें / Enter a valid 10-digit mobile number';
+    }
+
+    setFormErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleProceed = () => {
-    if (!selectedService || !citizenName || !citizenPhone) return;
+    if (!selectedService) return;
+    if (!validateCitizenDetails()) return;
     navigate('/app/upload');
   };
 
@@ -119,12 +143,18 @@ export function NewApplicationPage() {
                 <input
                   type="text"
                   value={citizenName}
-                  onChange={(e) => setCitizenName(e.target.value)}
+                  onChange={(e) => {
+                    setCitizenName(e.target.value);
+                    if (formErrors.citizenName) setFormErrors((prev) => ({ ...prev, citizenName: undefined }));
+                  }}
                   placeholder="जैसे: सुनीता देवी"
                   className="w-full pl-9 pr-3 py-2.5 border rounded-lg focus:outline-none"
                   style={{ borderColor: '#D8DDE8', fontSize: '14px' }}
                 />
               </div>
+               {formErrors.citizenName && (
+                <p className="mt-1" style={{ fontSize: '12px', color: '#D92D20' }}>{formErrors.citizenName}</p>
+              )}
             </div>
 
             <div>
@@ -136,12 +166,18 @@ export function NewApplicationPage() {
                 <input
                   type="tel"
                   value={citizenPhone}
-                  onChange={(e) => setCitizenPhone(e.target.value)}
+                   onChange={(e) => {
+                    setCitizenPhone(e.target.value);
+                    if (formErrors.citizenPhone) setFormErrors((prev) => ({ ...prev, citizenPhone: undefined }));
+                  }}
                   placeholder="+91 XXXXX XXXXX"
                   className="w-full pl-9 pr-3 py-2.5 border rounded-lg focus:outline-none"
                   style={{ borderColor: '#D8DDE8', fontSize: '14px' }}
                 />
               </div>
+              {formErrors.citizenPhone && (
+                <p className="mt-1" style={{ fontSize: '12px', color: '#D92D20' }}>{formErrors.citizenPhone}</p>
+              )}
             </div>
 
             <div>
