@@ -15,6 +15,7 @@ The project consists of **four main applications** that work together: a **Chrom
 - [Data Flows](#data-flows)
 - [Project Structure](#project-structure)
 - [Setup & Running](#setup--running)
+- [Deployment](#deployment)
 - [Permissions & Security](#permissions--security)
 - [Technology Stack](#technology-stack)
 
